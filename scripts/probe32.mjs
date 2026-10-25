@@ -1,0 +1,37 @@
+import { chromium } from 'playwright';
+import AxeBuilder from '@axe-core/playwright';
+import path from 'node:path';
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+await context.addInitScript(() => localStorage.setItem('terrain-o:onboarding-v1', 'seen'));
+const page = await context.newPage();
+await page.goto('http://127.0.0.1:5199/', { waitUntil: 'networkidle' });
+async function audit(label) {
+  const r = await new AxeBuilder({ page }).withTags(['wcag2aa', 'wcag21aa']).analyze();
+  console.log(label, '->', r.violations.length ? r.violations.map(v => v.id + '(' + v.nodes.length + ')').join(', ') : 'ok');
+  for (const v of r.violations) for (const n of v.nodes.slice(0, 2)) console.log('  ', n.target.join(' '), '::', n.any[0]?.message);
+}
+await page.locator('.menu-mobile-toggle').click();
+await page.waitForTimeout(300);
+await audit('mobile menu');
+await page.locator('.menu-mobile-close').click();
+await page.locator('[data-testid="file-input"]').setInputFiles([path.resolve('e2e/fixtures/alpine.png'), path.resolve('e2e/fixtures/alpine.jgw')]);
+await page.waitForTimeout(3000);
+await page.locator('.mobile-panel-button.mobile-right').click();
+await page.waitForTimeout(400);
+await audit('mobile right drawer');
+await page.getByRole('tab', { name: 'Classificazione' }).click().catch(() => {});
+await page.waitForTimeout(300);
+await audit('mobile classification');
+await page.locator('.dock-right .dock-mobile-close').click();
+await page.locator('.mobile-panel-button.mobile-left').click();
+await page.waitForTimeout(300);
+await audit('mobile left drawer');
+await page.locator('.dock-left .dock-mobile-close').click();
+await page.keyboard.press('F1').catch(() => {});
+await page.locator('.menu-mobile-toggle').click();
+await page.getByRole('menuitem', { name: 'Aiuto' }).click();
+await page.getByRole('menuitem', { name: 'Guida e scorciatoie' }).click();
+await page.waitForTimeout(500);
+await audit('mobile help');
+await browser.close();

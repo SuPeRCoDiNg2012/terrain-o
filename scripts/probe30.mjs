@@ -1,0 +1,15 @@
+import { chromium } from 'playwright';
+import path from 'node:path';
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+await context.addInitScript(() => localStorage.setItem('terrain-o:onboarding-v1', 'seen'));
+const page = await context.newPage();
+await page.goto('http://127.0.0.1:5199/', { waitUntil: 'networkidle' });
+await page.locator('[data-testid="file-input"]').setInputFiles([path.resolve('e2e/fixtures/alpine.png'), path.resolve('e2e/fixtures/alpine.jgw')]);
+await page.waitForTimeout(2500);
+await page.getByRole('tab', { name: 'Elementi' }).click();
+await page.waitForTimeout(400);
+await page.locator('.filter-row').screenshot({ path: 'screenshots/104-chips.png' });
+await page.locator('.feature-list').screenshot({ path: 'screenshots/105-feature-list.png' });
+await page.locator('.dock-right').screenshot({ path: 'screenshots/106-elements.png' });
+await browser.close();

@@ -1,0 +1,30 @@
+import { chromium, devices } from 'playwright';
+import path from 'node:path';
+const browser = await chromium.launch();
+for (const [label, vp] of [['phone', { width: 390, height: 844 }], ['tablet', { width: 820, height: 1180 }], ['small-desktop', { width: 1100, height: 720 }]]) {
+  const context = await browser.newContext({ viewport: vp, isMobile: label !== 'small-desktop', hasTouch: label !== 'small-desktop', deviceScaleFactor: 2 });
+  await context.addInitScript(() => localStorage.setItem('terrain-o:onboarding-v1', 'seen'));
+  const page = await context.newPage();
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  await page.goto('http://127.0.0.1:5199/', { waitUntil: 'networkidle' });
+  const mode = await page.getByTestId('app-shell').getAttribute('data-device');
+  const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
+  const innerW = await page.evaluate(() => window.innerWidth);
+  console.log(label, 'mode=', mode, 'scrollWidth=', scrollW, 'inner=', innerW, scrollW > innerW + 1 ? 'OVERFLOW!' : 'ok');
+  await page.locator('[data-testid="file-input"]').setInputFiles([path.resolve('e2e/fixtures/alpine.png'), path.resolve('e2e/fixtures/alpine.jgw')]);
+  await page.waitForTimeout(3000);
+  const box = await page.locator('.map-surface').boundingBox();
+  console.log(label, 'map box', box && { w: Math.round(box.width), h: Math.round(box.height) });
+  await page.locator('[data-testid="tool-draw-area"]').click({ force: true });
+  const pts = [[0.3, 0.3], [0.6, 0.3], [0.6, 0.6], [0.3, 0.6]];
+  for (const [x, y] of pts) await page.touchscreen.tap(box.x + box.width * x, box.y + box.height * y);
+  await page.keyboard.press('Enter').catch(() => {});
+  await page.waitForTimeout(600);
+  console.log(label, 'status:', (await page.locator('.status-bar-pro').innerText()).replace(/\n/g, ' | ').slice(0, 240));
+  await page.screenshot({ path: `screenshots/99-${label}.png` });
+  console.log(label, 'errors:', errors.length ? errors.join(' || ') : 'none');
+  await context.close();
+}
+await browser.close();

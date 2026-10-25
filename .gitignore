@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+.ref
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+/freebuff-sites-build/

@@ -1,0 +1,26 @@
+import { chromium } from 'playwright';
+import path from 'node:path';
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+await context.addInitScript(() => localStorage.setItem('terrain-o:onboarding-v1', 'seen'));
+const page = await context.newPage();
+const errors = [];
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('pageerror', (e) => errors.push(e.message));
+await page.goto('http://127.0.0.1:5199/', { waitUntil: 'networkidle' });
+await page.locator('[data-testid="file-input"]').setInputFiles([path.resolve('e2e/fixtures/alpine.png'), path.resolve('e2e/fixtures/alpine.jgw')]);
+await page.waitForFunction(() => document.body.innerText.includes('800 × 600'), null, { timeout: 30000 });
+await page.getByRole('tab', { name: 'Classificazione' }).click();
+await page.waitForTimeout(600);
+const apply = page.getByRole('button', { name: 'Applica classificazione' });
+await apply.click();
+await page.waitForTimeout(150);
+const cancel = page.getByRole('button', { name: 'Annulla' });
+console.log('cancel visible:', await cancel.isVisible().catch(() => false));
+if (await cancel.count()) await cancel.click();
+await page.waitForTimeout(1500);
+console.log('after cancel classification, apply disabled:', await apply.isDisabled(), 'status:', (await page.locator('.status-bar-pro').innerText()).replace(/\n/g, ' | ').slice(0, 120));
+console.log('error note:', await page.locator('.dock-right .issue-note, .dock-right [role="alert"]').allInnerTexts().catch(() => []));
+// vectorization requires classification, so skip
+console.log('errors:', errors.length ? errors : 'none');
+await browser.close();
