@@ -1,4 +1,5 @@
 import { useToastStore } from '../toastStore';
+import { useT } from '../../i18n';
 import { Icon } from './Icon';
 
 const icons = {
@@ -11,12 +12,13 @@ const icons = {
 export function ToastHost() {
   const toasts = useToastStore((state) => state.toasts);
   const dismiss = useToastStore((state) => state.dismiss);
+  const t = useT();
   return (
     <div className="toast-host" aria-live="polite" aria-atomic="false">
       {toasts.map((item) => (
         <div key={item.id} className={`toast toast-${item.kind}`} role={item.kind === 'error' ? 'alert' : 'status'}>
           <span className="toast-icon"><Icon name={icons[item.kind]} size={18} /></span>
-          <span className="toast-message">{item.message}</span>
+          <span className="toast-message">{t(item.message)}</span>
           {item.actionLabel && item.action && (
             <button
               type="button"
@@ -26,10 +28,10 @@ export function ToastHost() {
                 dismiss(item.id);
               }}
             >
-              {item.actionLabel}
+              {t(item.actionLabel)}
             </button>
           )}
-          <button type="button" className="icon-button toast-close" aria-label="Chiudi notifica" onClick={() => dismiss(item.id)}>
+          <button type="button" className="icon-button toast-close" aria-label={t('Chiudi notifica')} onClick={() => dismiss(item.id)}>
             <Icon name="x" size={15} />
           </button>
         </div>

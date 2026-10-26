@@ -5,49 +5,51 @@
 
 :root {
   color-scheme: dark;
-  --chrome-0: #0f151b;
-  --chrome-1: #151c24;
-  --chrome-2: #1a232d;
-  --chrome-3: #212c37;
-  --chrome-4: #283440;
-  --edge: #2a3541;
-  --edge-soft: #222c37;
-  --text: #d8e0e8;
-  --text-dim: #9aa8b6;
-  --text-faint: #7c8b99;
-  --accent-ui: #4aa98a;
-  --accent-ui-hi: #63c7a5;
-  --select: #4aa3d8;
+  /* Neutral graphite chrome. Slightly cool, no blue cast on the panels: the
+     map colours must stay the only saturated thing on screen. */
+  --chrome-0: #0f1216;
+  --chrome-1: #14181d;
+  --chrome-2: #191e24;
+  --chrome-3: #20262d;
+  --chrome-4: #272e36;
+  --edge: #2b323b;
+  --edge-soft: #232a32;
+  --text: #e6e9ee;
+  --text-dim: #aeb7c2;
+  --text-faint: #8b96a3;
+  --accent-ui: #6ea8d8;
+  --accent-ui-hi: #9ac9ee;
+  --select: #6ea8d8;
 
-  --ink: #d9e2ea;
-  --ink-soft: #c1ccd6;
-  --muted: #93a1af;
-  --faint: #7a8997;
-  --paper: #0f151b;
-  --paper-2: #131a21;
-  --panel: #18212a;
-  --panel-2: #141c24;
-  --line: #2a3541;
-  --line-strong: #3a4756;
-  --accent: #3f9b7d;
-  --accent-strong: #5cc6a2;
-  --accent-soft: #1d3a30;
-  --ochre: #d3a259;
-  --warning: #dfa84f;
-  --warning-soft: #3a2e1a;
-  --danger: #df766a;
-  --danger-soft: #3a2220;
-  --verified: #66c193;
-  --verified-soft: #1b3428;
-  --auto: #a89ae6;
-  --auto-soft: #292343;
-  --info: #76b6d7;
-  --info-soft: #1a2e3a;
-  --source: #7fb7cf;
-  --focus: #5cb8ec;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.6);
+  --ink: #e6e9ee;
+  --ink-soft: #cbd2da;
+  --muted: #a2acb8;
+  --faint: #8b96a3;
+  --paper: #0f1216;
+  --paper-2: #13171c;
+  --panel: #171c22;
+  --panel-2: #13171c;
+  --line: #2b323b;
+  --line-strong: #3a434e;
+  --accent: #5b9bd5;
+  --accent-strong: #8cc3ec;
+  --accent-soft: #1c2c3a;
+  --ochre: #d7ab68;
+  --warning: #e0b264;
+  --warning-soft: #332a1a;
+  --danger: #e28378;
+  --danger-soft: #34201e;
+  --verified: #74c69b;
+  --verified-soft: #193027;
+  --auto: #b4a6ea;
+  --auto-soft: #272240;
+  --info: #86bcd8;
+  --info-soft: #192b35;
+  --source: #8dbdd2;
+  --focus: #8cc3ec;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 22px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.62);
   --radius-sm: 3px;
   --radius: 5px;
   --radius-lg: 7px;
@@ -55,6 +57,27 @@
   --options-h: 36px;
   --status-h: 26px;
   --palette-w: 46px;
+  --font: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'Roboto Mono', Consolas, monospace;
+  --icon-weight: 350;
+}
+
+/* Interface typography: Inter is self-hosted (public/fonts). Numbers use
+   tabular figures so coordinates stop dancing when they change. */
+body {
+  font-family: var(--font);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  letter-spacing: 0;
+}
+button, input, select, textarea { font-family: inherit; }
+.mono, .status-bar-pro .mono { font-variant-numeric: tabular-nums; }
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-variation-settings: 'FILL' 0, 'wght' 350, 'GRAD' 0, 'opsz' 24;
 }
 
 body {
@@ -138,7 +161,10 @@ body {
   align-items: stretch;
   height: 100%;
   min-width: 0;
-  overflow: hidden;
+  /* Dropdowns are absolutely positioned children of .menu-root. Clipping the
+     nav made every menu open invisibly behind the workspace, so the top bar
+     looked dead on desktop. The mobile sheet below opts back into scrolling. */
+  overflow: visible;
 }
 
 .menu-root {
@@ -172,7 +198,13 @@ body {
   border: 1px solid var(--edge);
   border-radius: 5px;
   box-shadow: var(--shadow-md);
-  z-index: 50;
+  /* Desktop renders this in a body-level portal with fixed coordinates: the
+     dropdown must paint above the whole workspace, never inside the menu
+     bar's stacking context. It is also scrollable on short windows. */
+  z-index: 1200;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .menu-item {
@@ -236,6 +268,23 @@ body {
   font-size: 11px;
   color: var(--text-faint);
   margin-right: 4px;
+}
+
+.menu-lang {
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.menu-lang:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--chrome-3);
 }
 
 .menu-icon-button {
@@ -350,7 +399,7 @@ body {
 }
 
 .options-toggle:hover:not(:disabled) { background: #25313d; color: var(--text); }
-.options-toggle.on { background: #1e3a30; border-color: #2d5a49; color: #9ee0c6; }
+.options-toggle.on { background: #1b2b37; border-color: #37627c; color: #c3e3fa; }
 .options-toggle:disabled { opacity: 0.45; }
 
 .options-field {
@@ -460,6 +509,9 @@ body {
 .tool-group-block:first-of-type { border-top: 0; }
 
 .tool-group-label {
+  /* The rail is icon-first, like QGIS: group names live in the tooltips, a
+     hairline separates the groups. */
+  display: none;
   font-size: 7.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -470,6 +522,19 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.tool-group-block + .tool-group-block {
+  border-top: 1px solid var(--edge);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.section-title .icon { color: var(--accent-ui); }
+.app-banner > .icon { flex: 0 0 auto; }
+.dropzone .icon { color: var(--accent-ui); }
+.verification-heading > .icon { flex: 0 0 auto; margin-top: 1px; color: var(--warning); }
+.verification-card.is-verified .verification-heading > .icon { color: var(--verified); }
+.brand-mark .icon { color: #9ed3b6; }
 
 .palette-tool {
   position: relative;
@@ -484,7 +549,7 @@ body {
 }
 
 .palette-tool:hover:not(:disabled) { background: #232f3b; color: var(--text); border-color: var(--edge); }
-.palette-tool.active { background: #1e3a30; color: #8fe0c1; border-color: #2f5a4a; box-shadow: inset 2px 0 0 var(--accent-ui); }
+.palette-tool.active { background: #1b2b37; color: #a9d5f2; border-color: #37627c; box-shadow: inset 2px 0 0 var(--accent-ui); }
 .palette-tool:disabled { opacity: 0.35; }
 
 .palette-tool-key {
@@ -664,6 +729,8 @@ body {
 .status-muted { color: #7f8e9c; }
 .status-divider { width: 1px; height: 11px; background: #2a3540; }
 .status-spacer { flex: 1; }
+.status-auto { max-width: 280px; overflow: hidden; }
+.status-auto > span:not(.icon) { overflow: hidden; text-overflow: ellipsis; }
 .status-provenance { font-size: 10px; }
 .provenance-line { margin: 0 0 8px; font-size: 10.5px; color: #93a1af; }
 .provenance-auto { color: #b2a5ec; }
@@ -979,7 +1046,7 @@ body {
 .dock .feature-row:hover { background: #1a242e; }
 .dock .feature-row.selected {
   background: #1c2b25;
-  border-color: #4aa98a;
+  border-color: var(--accent-ui);
 }
 .dock .feature-row.selected .feature-title-line strong { color: #d8e0e8; }
 .dock .feature-meta { color: #93a1af; }
@@ -1036,6 +1103,22 @@ body {
   color: var(--text);
 }
 .dialog-panel .export-option:hover { background: #1a242e; }
+
+/* Landing highlight after Exporta → SVG/PNG/…: one ping, then it fades. */
+.dialog-panel .export-option.export-option-focus {
+  outline: 2px solid var(--accent-ui);
+  outline-offset: 1px;
+  animation: export-focus-fade 2.2s ease-out forwards;
+}
+
+@keyframes export-focus-fade {
+  0%, 70% { outline-color: var(--accent-ui); }
+  100% { outline-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-panel .export-option.export-option-focus { animation: none; }
+}
 .dialog-panel .export-summary {
   background: #141c24;
   border-color: #26313c;
@@ -1226,6 +1309,28 @@ body {
 .legend-row .legend-swatch { width: 14px; height: 10px; }
 
 .stats-block { padding: 7px; border: 1px solid #26313c; border-radius: 3px; background: #131b23; }
+.contrast-list { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
+.contrast-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 5px 6px;
+  border: 1px solid #26313c;
+  border-radius: 3px;
+  background: #141c24;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.contrast-row:hover:not(:disabled) { background: #1a242e; border-color: #3a4a5a; }
+.contrast-row:disabled { cursor: default; opacity: 0.7; }
+.contrast-row strong { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+.contrast-row .tiny { grid-column: 1 / -1; }
+.contrast-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin: 4px 0 2px; }
+.contrast-filters label { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 9.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.contrast-filters select { width: 100%; height: 24px; padding: 0 4px; font-size: 10.5px; }
+.contrast-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 4px; }
+.contrast-toolbar .shell-actions { align-items: center; }
 .stat-row { display: flex; align-items: center; gap: 7px; font-size: 10px; }
 .stat-label { width: 108px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat-track { flex: 1; height: 5px; background: #232f3a; border-radius: 2px; overflow: hidden; }
@@ -1238,7 +1343,7 @@ body {
   color: #dcc08d;
 }
 .onboarding-hero p { color: var(--text-dim); }
-.onboarding-icon { background: #1e3a30; color: #8fe0c1; border-color: #2d5a49; }
+.onboarding-icon { background: #1b2b37; color: #a9d5f2; border-color: #37627c; }
 
 .help-lead { background: #2f2718; border-color: #4b3c22; color: #e0c28c; }
 .help-lead p { color: #d6bd91; }
@@ -1380,6 +1485,7 @@ body.dragging-panel .dock-bottom.empty .dock-body {
     right: 0;
     height: auto;
     max-height: calc(100dvh - var(--menu-h) - var(--status-h) - var(--safe-bottom));
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 8px 8px 12px;
@@ -1435,22 +1541,23 @@ body.dragging-panel .dock-bottom.empty .dock-body {
   }
 
   .menu-trigger.open {
-    border-color: #2d5a49;
-    background: #1e3a30;
-    color: #9ee0c6;
+    border-color: #37627c;
+    background: #1b2b37;
+    color: #c3e3fa;
   }
 
+  /* Touch sheet: the portal keeps fixed coordinates, but the panel uses the
+     full width of the screen instead of the desktop min-width. */
   .menu-popup {
-    position: static;
-    width: 100%;
+    left: 8px !important;
+    width: calc(100vw - 16px) !important;
     min-width: 0;
-    margin: 1px 0 4px;
-    padding: 2px 0 4px 6px;
-    border: 0;
-    border-left: 2px solid #2f5a4a;
-    border-radius: 0;
-    box-shadow: none;
-    background: #10171e;
+    max-height: 62vh;
+    padding: 4px;
+    border: 1px solid var(--edge);
+    border-radius: 6px;
+    box-shadow: var(--shadow-md);
+    background: #171f28;
   }
 
   .menu-item {
@@ -1737,8 +1844,9 @@ body.dragging-panel .dock-bottom.empty .dock-body {
 }
 
 @media (max-width: 620px) {
-  .options-tolerance { display: none; }
-  .options-tool-name { max-width: 96px; }
+  .options-tolerance { display: none; }  .options-tool-name {
+    display: none;
+  }
   .status-bar-pro .status-segment:nth-child(2) .status-divider,
   .status-bar-pro .status-segment:nth-child(2) .mono:nth-of-type(2) { display: none; }
 }

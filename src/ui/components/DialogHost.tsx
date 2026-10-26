@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDialogStore } from '../dialogStore';
+import { useT } from '../../i18n';
 
 export function DialogHost() {
   const current = useDialogStore((state) => state.current);
   const settle = useDialogStore((state) => state.settle);
   const cancel = useDialogStore((state) => state.cancel);
+  const t = useT();
   const [note, setNote] = useState('');
   const [declared, setDeclared] = useState(false);
   const [distance, setDistance] = useState('100');
@@ -64,7 +66,7 @@ export function DialogHost() {
   const submitCalibration = () => {
     const value = Number(distance.replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Inserire una distanza numerica maggiore di zero.');
+      setError(t('Inserire una distanza numerica maggiore di zero.'));
       return;
     }
     settle(value);
@@ -88,10 +90,10 @@ export function DialogHost() {
         onKeyDown={onKeyDown}
       >
         <div className="dialog-kicker">
-          {current.kind === 'verify' ? 'Verifica sul campo' : current.kind === 'calibrate' ? 'Calibrazione' : 'Terrain / O'}
+          {current.kind === 'verify' ? t('Verifica sul campo') : current.kind === 'calibrate' ? t('Calibrazione') : 'Terrain / O'}
         </div>
-        <h2 id={titleId}>{current.title}</h2>
-        <p id={bodyId} className="dialog-body">{current.body}</p>
+        <h2 id={titleId}>{t(current.title)}</h2>
+        <p id={bodyId} className="dialog-body">{t(current.body)}</p>
 
         {current.kind === 'verify' && (
           <>
@@ -101,14 +103,14 @@ export function DialogHost() {
               ))}
               {current.featureNames.length > 6 && <span className="muted">+{current.featureNames.length - 6}</span>}
             </div>
-            <label className="field-label" htmlFor="verify-note">Nota di verifica (facoltativa)</label>
+            <label className="field-label" htmlFor="verify-note">{t('Nota di verifica (facoltativa)')}</label>
             <textarea
               id="verify-note"
               className="text-input"
               rows={2}
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="Es. controllo n. 101 verificato il 24/10 con la società locale"
+              placeholder={t('Es. controllo n. 101 verificato il 24/10 con la società locale')}
             />
             <label className="checkbox-row">
               <input
@@ -118,12 +120,12 @@ export function DialogHost() {
                 data-testid="verify-declaration"
               />
               <span>
-                Dichiaro di aver verificato personalmente questo elemento sul campo. La modifica della geometria revocherà automaticamente la verifica.
+                {t('Dichiaro di aver verificato personalmente questo elemento sul campo. La modifica della geometria revocherà automaticamente la verifica.')}
               </span>
             </label>
             <div className="dialog-actions">
               <button type="button" className="btn btn-ghost" onClick={cancel} data-testid="dialog-cancel">
-                Annulla
+                {t('Annulla (dialogo)')}
               </button>
               <button
                 type="button"
@@ -132,7 +134,7 @@ export function DialogHost() {
                 onClick={() => settle({ note })}
                 data-testid="dialog-confirm"
               >
-                Dichiaro e verifico
+                {t('Dichiaro e verifico')}
               </button>
             </div>
           </>
@@ -140,7 +142,7 @@ export function DialogHost() {
 
         {current.kind === 'calibrate' && (
           <>
-            <label className="field-label" htmlFor="calibration-distance">Distanza reale (metri)</label>
+            <label className="field-label" htmlFor="calibration-distance">{t('Distanza reale (metri)')}</label>
             <input
               id="calibration-distance"
               className="text-input"
@@ -161,9 +163,9 @@ export function DialogHost() {
             />
             {error && <p className="form-error" role="alert">{error}</p>}
             <div className="dialog-actions">
-              <button type="button" className="btn btn-ghost" onClick={cancel}>Annulla</button>
+              <button type="button" className="btn btn-ghost" onClick={cancel}>{t('Annulla (dialogo)')}</button>
               <button type="button" className="btn btn-primary" onClick={submitCalibration} data-testid="dialog-confirm">
-                Calcola scala
+                {t('Calcola scala')}
               </button>
             </div>
           </>
@@ -172,7 +174,7 @@ export function DialogHost() {
         {current.kind === 'confirm' && (
           <div className="dialog-actions">
             <button type="button" className="btn btn-ghost" onClick={() => settle(false)} data-testid="dialog-cancel" data-autofocus>
-              {current.cancelLabel}
+              {t(current.cancelLabel === 'Annulla' ? 'Annulla (dialogo)' : current.cancelLabel)}
             </button>
             <button
               type="button"
@@ -180,7 +182,7 @@ export function DialogHost() {
               onClick={() => settle(true)}
               data-testid="dialog-confirm"
             >
-              {current.confirmLabel}
+              {t(current.confirmLabel)}
             </button>
           </div>
         )}
@@ -188,7 +190,7 @@ export function DialogHost() {
         {current.kind === 'alert' && (
           <div className="dialog-actions">
             <button type="button" className="btn btn-primary" onClick={() => settle(true)} data-testid="dialog-confirm" data-autofocus>
-              Ho capito
+              {t('Ho capito')}
             </button>
           </div>
         )}

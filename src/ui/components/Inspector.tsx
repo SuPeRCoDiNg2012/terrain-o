@@ -23,6 +23,7 @@ const SOURCE_LABEL: Record<NonNullable<Feature['source']>, string> = {
   vector: 'classificazione automatica',
   gpx: 'import GPX',
   dem: 'DEM',
+  ml: 'riconoscimento AI',
 };
 
 function typesForKind(kind: Feature['kind']): Record<string, { label: string }> {
@@ -244,6 +245,12 @@ export function Inspector() {
             <div><span>Fonte</span><strong>{SOURCE_LABEL[single.source ?? 'manual']}</strong></div>
             {single.source === 'osm' && <div><span>Stato dati</span><strong>automatico, non verificato</strong></div>}
             {single.osmId != null && <div><span>ID OSM</span><strong className="mono">{single.osmId}</strong></div>}
+            {single.mlConfidence != null && (
+              <div><span>Confidenza AI</span><strong className="mono">{Math.round(single.mlConfidence * 100)}%</strong></div>
+            )}
+            {single.mergedFrom?.length ? (
+              <div><span>Duplicati assorbiti</span><strong>{single.mergedFrom.length}</strong></div>
+            ) : null}
             {single.type === 'control' && (
               <div><span>Ordine percorso</span><strong>{courseIndex >= 0 ? courseIndex : '—'}</strong></div>
             )}

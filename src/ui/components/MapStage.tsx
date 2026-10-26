@@ -9,6 +9,7 @@ import {
   featureBounds,
   hitTest,
   pointDistance,
+  pointInFeature,
   snapPoint,
 } from '../../edit/geometry';
 import { drawProject } from '../../render/scene';
@@ -74,10 +75,45 @@ function pointInPolygon(point: Point, polygon: Point[]): boolean {
   return inside;
 }
 
+function segmentsCross(a: Point, b: Point, c: Point, d: Point): boolean {
+  const cross = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+}
+
+/**
+ * True when a feature actually intersects the free-hand lasso. Testing only
+ * vertices and the bbox centre (the old behaviour) missed large areas that
+ * enclosed the lasso and lines that crossed it with both endpoints outside.
+ */
 function featureTouches(polygon: Point[], feature: Feature): boolean {
+  if (feature.kind === 'point') return pointInPolygon(feature.coords[0], polygon);
   if (feature.coords.some((point) => pointInPolygon(point, polygon))) return true;
-  const bounds = featureBounds(feature);
-  return pointInPolygon({ x: (bounds.minX + bounds.maxX) / 2, y: (bounds.minY + bounds.maxY) / 2 }, polygon);
+  if (feature.kind === 'area' && polygon.some((point) => pointInFeature(feature, point))) return true;
+
+  const edges = feature.coords.length - 1;
+  for (let index = 0; index < edges; index++) {
+    const a = feature.coords[index];
+    const b = feature.coords[index + 1];
+    for (let other = 0; other < polygon.length; other++) {
+      const c = polygon[other];
+      const d = polygon[(other + 1) % polygon.length];
+      if (segmentsCross(a, b, c, d)) return true;
+    }
+  }
+  if (feature.kind === 'area' && feature.coords.length > 2) {
+    const a = feature.coords[feature.coords.length - 1];
+    const b = feature.coords[0];
+    for (let other = 0; other < polygon.length; other++) {
+      const c = polygon[other];
+      const d = polygon[(other + 1) % polygon.length];
+      if (segmentsCross(a, b, c, d)) return true;
+    }
+  }
+  return false;
 }
 
 export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProps) {
@@ -281,6 +317,10 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      // A modal or an open menu owns Escape/Enter/Space. Acting on the map at
+      // the same time made Escape close a menu AND cancel the current draft.
+      if (document.querySelector('.dialog-backdrop') || document.querySelector('.menu-popup')) return;
+      if (target?.closest('.menu-bar')) return;
       // Keep Space/Enter usable for keyboard activation of focused controls.
       const control = target?.closest('button, a, [role="button"], [role="tab"]');
       if (control && (event.code === 'Space' || event.key === 'Enter')) return;
@@ -324,6 +364,19 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, calibrationStart, activeTool, clearSelection, setTool]);
+
+  useEffect(() => {
+    // A new project or a replaced source must not leave a half-drawn polygon
+    // that would be committed into the new image later.
+    setDraft([]);
+    setDraftKind(null);
+    setHoverPoint(null);
+    setCalibrationStart(null);
+    setRubber(null);
+    lassoRef.current = [];
+    setLasso([]);
+    dragRef.current = null;
+  }, [project.id, project.image?.assetId]);
 
   useEffect(() => {
     if (activeTool !== 'draw-area' && activeTool !== 'draw-line' && draft.length) {
@@ -809,6 +862,7 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
   useEffect(() => {
     if (activeTool !== 'lasso' || !layout.lassoPolygon) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector('.dialog-backdrop') || document.querySelector('.menu-popup')) return;
       if (event.key === 'Enter' && lassoRef.current.length >= 3) {
         event.preventDefault();
         finishLasso(lassoRef.current);

@@ -350,6 +350,7 @@ textarea.text-input { resize: vertical; line-height: 1.45; min-height: 52px; }
   cursor: pointer; font-size: 11.5px; line-height: 1.35;
 }
 .switch-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-row.is-disabled { opacity: 0.55; cursor: not-allowed; }
 .switch-track {
   width: 32px; height: 18px; border-radius: 999px; flex: 0 0 auto;
   background: #cfc7b5; border: 1px solid #b4aa96;

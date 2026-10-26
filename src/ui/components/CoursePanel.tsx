@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Feature } from '../../model/types';
 import { selectCourseFeatures, useProjectStore } from '../../store/projectStore';
 import { distanceBetween, formatMeters, wgs84ToPixel } from '../../geo/projection';
@@ -14,6 +14,13 @@ import { Icon } from './Icon';
 function CourseCodeInput({ feature }: { feature: Feature }) {
   const updateFeatureFields = useProjectStore((state) => state.updateFeatureFields);
   const [value, setValue] = useState(feature.code ?? '');
+
+  // Keep the field in sync with undo/redo and GPX imports; otherwise the
+  // input would keep showing a code that no longer belongs to the element.
+  useEffect(() => {
+    setValue(feature.code ?? '');
+  }, [feature.code]);
+
   return (
     <input
       className="course-code-input"
@@ -68,7 +75,6 @@ export function CoursePanel() {
   };
 
   const deletePoint = async (feature: Feature) => {
-    select([feature.id]);
     const ok = await confirmDialog({
       title: `Eliminare ${typeSpec(feature.type).label}?`,
       body: 'Il punto percorso verrà rimosso. Se è un controllo, i successivi mantengono il loro codice; l\'ordine viene ricompattato.',
@@ -76,6 +82,8 @@ export function CoursePanel() {
       danger: true,
     });
     if (ok) {
+      // Select only after confirmation: cancelling must not steal the current
+      // selection from under the user.
       select([feature.id]);
       deleteSelected();
     }

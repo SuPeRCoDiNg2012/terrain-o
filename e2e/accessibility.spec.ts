@@ -7,6 +7,7 @@ const FIXTURES = path.resolve('e2e/fixtures');
 async function openApp(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('terrain-o:onboarding-v1', 'seen');
+    localStorage.setItem('terrain-o/locale/v1', 'it');
   });
   await page.goto('/');
   await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -53,7 +54,7 @@ test.describe('WCAG AA in the desktop shell', () => {
     await page.getByTestId('tool-select').click();
     await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.4);
 
-    for (const tab of ['Elementi', 'Proprietà', 'Classificazione', 'Vettoriz.', 'Storia', 'Info', 'OSM', 'Percorso']) {
+    for (const tab of ['Elementi', 'Proprietà', 'Classificazione', 'Vettoriz.', 'AI', 'Storia', 'Info', 'OSM', 'Percorso']) {
       await page.getByRole('tab', { name: tab, exact: true }).first().click();
       expect(await violations(page), `panel ${tab}`).toEqual([]);
     }

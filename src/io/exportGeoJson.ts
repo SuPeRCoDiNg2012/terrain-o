@@ -88,6 +88,8 @@ export function exportProjectGeoJson(project: Project): string {
         verificationHistory: feature.history,
         source: feature.source ?? 'manual',
         osmId: feature.osmId ?? null,
+        ...(feature.mlConfidence != null ? { mlConfidence: round(feature.mlConfidence, 3) } : {}),
+        ...(feature.mergedFrom?.length ? { mergedFrom: feature.mergedFrom } : {}),
         code: feature.code ?? null,
         order: feature.order ?? null,
       },

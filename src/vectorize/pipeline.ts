@@ -22,6 +22,9 @@ const CLASS_TO_TYPE: Record<number, string> = {
   2: 'open',
   3: 'water',
   4: 'artificial',
+  // Class 5 exists only in the AI label map, where it separates buildings from
+  // other artificial surfaces. The rule classifier keeps its four families.
+  5: 'building',
 };
 
 export function classFeatureType(classId: number): string | null {
@@ -77,13 +80,40 @@ function polygonConfidence(
   const steps = 16;
   const stepX = Math.max(1, (maxX - minX) / steps);
   const stepY = Math.max(1, (maxY - minY) / steps);
+  // Hole bounding boxes reject most samples before the O(vertices) test.
+  const holeBounds = holes.map((hole) => {
+    let holeMinX = Infinity;
+    let holeMinY = Infinity;
+    let holeMaxX = -Infinity;
+    let holeMaxY = -Infinity;
+    for (const point of hole) {
+      if (point.x < holeMinX) holeMinX = point.x;
+      if (point.x > holeMaxX) holeMaxX = point.x;
+      if (point.y < holeMinY) holeMinY = point.y;
+      if (point.y > holeMaxY) holeMaxY = point.y;
+    }
+    return { hole, holeMinX, holeMinY, holeMaxX, holeMaxY };
+  });
   let sum = 0;
   let count = 0;
   for (let y = minY + stepY / 2; y <= maxY; y += stepY) {
     for (let x = minX + stepX / 2; x <= maxX; x += stepX) {
       const point = { x, y };
       if (!pointInRing(point, coords)) continue;
-      if (holes.some((hole) => pointInRing(point, hole))) continue;
+      let insideHole = false;
+      for (const bounds of holeBounds) {
+        if (
+          x >= bounds.holeMinX &&
+          x <= bounds.holeMaxX &&
+          y >= bounds.holeMinY &&
+          y <= bounds.holeMaxY &&
+          pointInRing(point, bounds.hole)
+        ) {
+          insideHole = true;
+          break;
+        }
+      }
+      if (insideHole) continue;
       const px = Math.max(0, Math.min(width - 1, Math.floor(x)));
       const py = Math.max(0, Math.min(height - 1, Math.floor(y)));
       const pixel = py * width + px;

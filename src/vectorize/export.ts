@@ -43,6 +43,7 @@ const CLASS_LABELS: Record<number, string> = {
   2: 'Terreno aperto (sperimentale)',
   3: 'Acqua (sperimentale)',
   4: 'Superficie artificiale (sperimentale)',
+  5: 'Edificio (sperimentale)',
 };
 
 /**

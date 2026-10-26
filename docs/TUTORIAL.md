@@ -2,6 +2,8 @@
 
 **Versione 0.5.0 · Bozza preliminare**
 
+English edition: [TUTORIAL.en.md](TUTORIAL.en.md).
+
 Questo manuale descrive ogni funzione dell'editor, ogni pannello, ogni voce di menu,
 ogni strumento e ogni scorciatoia. È pensato per essere letto dall'inizio alla fine
 oppure consultato come riferimento mentre si lavora.
@@ -72,7 +74,7 @@ Quattro livelli restano sempre distinti.
 | Livello | Origine | Come si riconosce |
 | --- | --- | --- |
 | **Sorgente** | ortofoto importata | raster, nessun bordo vettoriale |
-| **Automatico** | classificazione, vettorizzazione, OSM, DEM | bordo tratteggiato sottile, neutro |
+| **Automatico** | classificazione, AI, vettorizzazione, OSM, DEM | bordo tratteggiato sottile, neutro |
 | **Manuale** | geometria disegnata o corretta dall'utente | bordo pieno sottile, neutro |
 | **Verificato** | dichiarazione esplicita dell'utente | bordo pieno + spunta ✓ nell'angolo |
 
@@ -133,11 +135,11 @@ npm run preview
 | --- | --- |
 | `npm run typecheck` | TypeScript senza emissione |
 | `npm run lint` | ESLint su tutto il progetto |
-| `npm test` | Vitest: 51 test |
+| `npm test` | Vitest: 112 test |
 | `npm run test:watch` | Vitest in watch |
 | `npm run coverage` | copertura V8 |
 | `npx playwright install chromium` | installa il browser per gli E2E |
-| `npx playwright test` | 4 test end-to-end desktop + mobile |
+| `npx playwright test` | 13 test end-to-end desktop + mobile + AI + OSM simulato + elaborazione automatica |
 | `npm run check` | lint, typecheck, test e build in sequenza |
 
 ### 2.6 Manuale PDF
@@ -307,13 +309,24 @@ a destra, il nome del progetto e le icone Importa, Esporta, Aiuto.
 | Genera aree (aggiungi) | esegue e aggiunge alle aree esistenti |
 | Annulla vettorizzazione | annulla il job |
 
+#### AI
+
+| Voce | Effetto |
+| --- | --- |
+| Apri pannello Riconoscimento AI | porta il pannello in primo piano |
+| Elaborazione automatica completa | esegue tutti gli stadi: OSM, elementi, classificazione, vettorizzazione, AI, curve, fusione |
+| Annulla elaborazione automatica | interrompe lo stadio in corso e conserva il lavoro già completato |
+| Riconosci simboli (locale) | addestra il modello sui dati del progetto e genera aree e alberi automatici |
+| Annulla riconoscimento | interrompe il worker e scarta il risultato |
+| Unifica livello simboli | elimina i duplicati automatici dello stesso simbolo, senza toccare manuale e verificato |
+
 #### OSM
 
 | Voce | Effetto |
 | --- | --- |
 | Apri pannello OpenStreetMap | porta il pannello in primo piano |
-| Scarica strade e corsi d'acqua | interroga Overpass/API OSM |
-| Converti in elementi cartografici | converte i tracciati grezzi in feature OSM |
+| Scarica dati OSM (edifici, verde, acqua, viabilità) | interroga Overpass/API OSM |
+| Genera elementi automatici da OSM | converte i dati grezzi in feature OSM automatiche |
 | Rimuovi tracciati OSM dal progetto | svuota il livello grezzo |
 
 #### Esporta
@@ -512,8 +525,9 @@ indica la vista corrente.
 
 ### 6.8 Altri pannelli
 
-OSM, DEM, Percorso, Classificazione e Vettorizzazione sono descritti nelle sezioni
-dedicate.
+OSM, DEM, Percorso, Classificazione, Vettorizzazione e Riconoscimento AI sono descritti
+nelle sezioni dedicate. Il pannello AI contiene il modello, i parametri degli alberi, la
+pulizia morfologica, l'azione di unificazione e il report dell'ultimo riconoscimento.
 
 ---
 
@@ -1018,6 +1032,109 @@ applicare, salvare GeoJSON e riaprirlo in QGIS.
 - "Poligoni scartati tutti": area minima sopra la dimensione reale delle regioni.
 - "Geometrie con autointersezione": segnalare il caso, non forzare l'export.
 
+### 16.7 Riconoscimento AI e livello simboli
+
+Questa funzione è separata dalla classificazione a regole e produce elementi
+**automatici**, mai verificati. Il pannello si apre da **AI → Apri pannello
+Riconoscimento AI** oppure dalla scheda **AI** nel dock destro.
+
+#### Come impara
+
+Il modello è un random forest locale, deterministico, eseguito in un web worker. Lavora su
+superpixel e su 12 descrittori: L\*a\*b\*, croma, texture LBP, densità e forza dei bordi,
+area del segmento, riempimento, allungamento, contrasto con i segmenti vicini e varianza
+locale. Le classi sono sei: non classificato, vegetazione, aperto, acqua, artificiale,
+edificio.
+
+Gli esempi hanno pesi diversi:
+
+| Fonte | Peso | Note |
+| --- | --- | --- |
+| Area manuale | 3 | la supervisione più forte: l'utente l'ha disegnata |
+| Area OSM | 0,5–1,1 | esterna, può essere arretrata o disallineata |
+| Pseudo-etichetta dalle regole | 0,22–0,45 | solo dove manca un esempio vero; disattivabile |
+
+Senza OSM e senza aree manuali il modello può comunque partire grazie alle
+pseudo-etichette, ma impara soltanto ciò che le regole già sanno. Per un risultato
+migliore disegna alcune aree rappresentative di edificio, bosco, acqua e aperto, oppure
+importa OSM prima di lanciare il riconoscimento.
+
+#### Parametri del pannello
+
+| Controllo | Effetto |
+| --- | --- |
+| Pseudo-etichette dalle regole | usa le decisioni più sicure come esempi deboli |
+| Rileva alberi isolati | attiva il rilevatore di chiome dentro la vegetazione |
+| Sensibilità alberi | abbassa o alza la soglia del rilevatore (10–100%) |
+| Max alberi | limite di punti generati (20–4000) |
+| Pulizia confini | filtro di maggioranza 0–4 (0 = spento) |
+| Area minima | scarta componenti sotto la soglia in px² |
+
+**Riconosci simboli** mostra l'avanzamento per stadio: bilanciamento, feature,
+superpixel, campioni, addestramento, classificazione, pulizia, vettorizzazione. **Annulla**
+termina il worker e non applica nulla. Al termine il pannello mostra campioni, esempi
+veri, classi, validazione holdout, aree, edifici, alberi e peso delle feature.
+
+#### Cosa viene creato
+
+- aree vettorizzate con la pipeline topologica esistente, compresa la classe edificio;
+- punti **Albero isolato** rilevati sulle chiome;
+- ogni elemento ha `source: 'ml'`, confidenza `mlConfidence` e bordo tratteggiato;
+- nessun elemento è verificato e nessun flusso scrive coordinate fuori da
+  `updateFeatureGeometry`.
+
+La validazione holdout è un accordo su esempi esclusi dall'addestramento, non una misura
+di accuratezza sul terreno. Un valore alto non autorizza a dichiarare verificato nulla.
+
+#### Unificare il livello simboli
+
+La fusione parte **automaticamente** al termine di **Riconosci simboli** e quando si
+generano elementi OSM o vettoriali; **Unifica livello simboli** la riesegue a richiesta.
+Confronta i simboli dello stesso tipo:
+
+- per le aree bastano IoU ≥ 0,4 oppure contenimento ≥ 0,8;
+- per i punti — alberi compresi — due simboli entro 6 px sono lo stesso simbolo;
+- per le linee servono almeno il 70% del tracciato entro 3,5 px in entrambe le direzioni,
+  con lunghezze confrontabili;
+- vince il più affidabile: verificato → manuale/GPX → OSM → AI → vettorizzazione.
+
+Gli elementi automatici eliminati vengono registrati in `mergedFrom` sul sopravvissuto.
+Manuale e verificato non vengono mai rimossi né modificati: se due elementi protetti si
+sovrappongono restano entrambi e il contatore **Conflitti protetti** lo segnala. La fusione
+non modifica le coordinate e non tocca il percorso di revoca della verifica.
+
+#### Elaborazione completa in un clic
+
+**AI → Elaborazione automatica completa**, oppure **Esegui tutto** nella sezione
+**Elaborazione completa** del pannello AI, esegue in sequenza:
+
+1. download OSM, se l'immagine è georeferenziata e l'opzione è attiva;
+2. generazione degli elementi OSM (edifici, alberi, acqua, verde, strade, sentieri);
+3. classificazione con prior OSM;
+4. vettorizzazione con la pipeline topologica;
+5. riconoscimento AI con pseudo-etichette, edifici e alberi;
+6. curve di livello DEM, se georeferenziata e attiva;
+7. unificazione del livello simboli con deduplicazione di aree, linee e punti.
+
+Ogni stadio usa i risultati del precedente. Se OSM o DEM non rispondono, o se manca la
+georeferenziazione, lo stadio viene saltato o segnalato come avviso e la pipeline continua con
+ciò che è disponibile. **Annulla** interrompe lo stadio in corso e conserva il lavoro già
+completato. Il report finale mostra OSM, classificazione, aree vettoriali, simboli AI,
+edifici, alberi, curve, duplicati uniti e simboli totali. Il risultato è sempre automatico:
+non dichiara percorribilità, sicurezza, quota di precisione o conformità IOF.
+
+#### Limiti e problemi comuni
+
+- Non è una rete neurale pre-addestrata: non riconosce tutti i simboli ISOM, solo le classi
+  previste e i punti albero.
+- "Servono più esempi": disegna aree di classi diverse, importa OSM o attiva le
+  pseudo-etichette.
+- "Il modello vede una sola classe": aggiungi esempi di altre classi; con una sola classe
+  il modello non può discriminare.
+- Un edificio OSM arretrato prevale sull'AI durante l'unificazione: correggi o elimina
+  l'elemento OSM, oppure disattiva la fusione per quel caso.
+- Il punto albero è un candidato geometrico, non una certezza: verificalo sul campo.
+
 ---
 
 ## 17. Import / export, OSM, DEM, tracciato
@@ -1045,11 +1162,28 @@ La sorgente è immutabile: nessuno strumento di disegno la modifica.
 
 1. **OSM → Apri pannello OpenStreetMap** oppure tab **OSM**.
 2. Premere **Importa da OSM** (o **Forza download** per ignorare la cache).
-3. Overpass viene interrogata solo per **strade e corsi d'acqua** nel bbox
-   dell'immagine, in riquadri da 0,05° con cache locale di 24 ore.
-4. **Converti in elementi** trasforma i tracciati grezzi in elementi **automatici**,
-   non verificati, con deduplicazione per ID OSM.
-5. **Svuota** rimuove il livello OSM grezzo; **Annulla** ferma il download.
+3. Overpass viene interrogata per **edifici, land use, acqua, parchi, strade, sentieri,
+   barriere, ferrovie e alberi** nel bbox dell'immagine, in riquadri da 0,05° con cache
+   locale di 24 ore. I multipoligoni sono ricomposti e i fori interni conservati.
+4. **Genera elementi automatici** crea feature per edifici, alberi, acqua, bosco, arbusti, aree
+   aperte, superfici artificiali, strade, sentieri, ruscelli e barriere. Sono elementi
+   **automatici**, non verificati, con deduplicazione per ID OSM. Gli alberi OSM diventano
+   punti **Albero isolato** e alimentano anche il prior di vegetazione. Il livello OSM grezzo
+   viene nascosto dopo la generazione: resta visibile un solo livello di simboli, già
+   deduplicato; riattivalo da Livelli per confrontare la fonte.
+5. **Fusione automatica** esegue in un solo passaggio la generazione degli elementi e la
+   classificazione con prior OSM. In alternativa, la classificazione usa i confini OSM
+   come prior ogni volta che viene eseguita: il peso si regola nel pannello Classificazione.
+   L'immagine resta la fonte primaria; il prior non dichiara mai un elemento verificato.
+   Dopo la classificazione il pannello OSM mostra l'**accordo** complessivo, la copertura
+   dell'immagine e l'accordo per vegetazione, aperto, acqua e artificiale. Le aree sotto il
+   65% vengono elencate singolarmente: un clic seleziona l'elemento OSM generato. Un valore
+   basso segnala OSM arretrato o disallineato e non corregge nulla automaticamente.
+   L'elenco si filtra per **classe** (vegetazione, aperto, acqua, artificiale) e per **area
+   minima** (100, 500 o 2.000 px²); **Azzera** riporta i filtri a tutte le aree. **Esporta
+   CSV** salva solo le righe visibili, con nome, ID OSM, classe, accordo, area e stato di
+   generazione; il file usa UTF-8 con BOM per aprirsi correttamente in Excel.
+6. **Svuota** rimuove il livello OSM grezzo; **Annulla** ferma il download.
 
 Se la rete manca o l'API risponde con errore, compare un messaggio nel pannello e nulla
 viene applicato.
@@ -1236,8 +1370,8 @@ drawer, la palette è orizzontale, i menu sono a comparsa. Le funzioni restano l
 ### 20.2 Glossario
 
 - **Sorgente**: immagine raster importata, immutabile.
-- **Auto**: elemento prodotto dalla classificazione o dalla vettorizzazione.
-- **Manuale**: elemento disegnato o importato da OSM.
+- **Auto**: elemento prodotto dalla classificazione, dal riconoscimento AI, dalla vettorizzazione, da OSM o dal DEM.
+- **Manuale**: elemento disegnato o corretto dall’utente.
 - **Verificato**: elemento dichiarato verificato dall'utente.
 - **Superpixel**: regione omogenea usata come unità di classificazione.
 - **LBP**: Local Binary Pattern, descrittore di texture.

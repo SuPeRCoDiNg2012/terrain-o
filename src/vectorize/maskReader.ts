@@ -41,6 +41,7 @@ export const CLASS_SPECIFICITY: Record<number, number> = {
   2: 1,
   3: 3,
   4: 1,
+  5: 3,
 };
 
 function resolveClaims(

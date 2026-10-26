@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { get2d } from '../../render/canvas';
 import { useUiStore } from '../uiStore';
+import { useT } from '../../i18n';
+import { Icon } from './Icon';
 
 const MAP_W = 172;
 const MAP_H = 118;
 
 export function Minimap({ onClose }: { onClose?: () => void }) {
+  const t = useT();
   const project = useProjectStore((state) => state.project);
   const sourceImage = useProjectStore((state) => state.sourceImage);
   const view = useProjectStore((state) => state.view);
@@ -77,12 +80,10 @@ export function Minimap({ onClose }: { onClose?: () => void }) {
   return (
     <div className="minimap" data-stage-interactive>
       <div className="minimap-header">
-        <span>Minimappa</span>
+        <span>{t('Minimappa')}</span>
         {onClose && (
-          <button type="button" className="icon-button" aria-label="Nascondi minimappa" onClick={onClose}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
+          <button type="button" className="icon-button" aria-label={t('Nascondi minimappa')} onClick={onClose}>
+            <Icon name="x" size={14} />
           </button>
         )}
       </div>
@@ -91,7 +92,7 @@ export function Minimap({ onClose }: { onClose?: () => void }) {
         className="minimap-canvas"
         style={{ width: MAP_W, height: MAP_H }}
         onClick={(event) => jump(event.clientX, event.clientY)}
-        aria-label="Minimappa: clicca per centrare la vista"
+        aria-label={t('Minimappa: clicca per centrare la vista')}
         role="img"
       />
     </div>

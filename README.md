@@ -10,6 +10,10 @@ Editor desktop e mobile per **bozze preliminari di mappe di orienteering** a par
 Il manuale completo, funzione per funzione e tasto per tasto, è in
 [docs/TUTORIAL.md](docs/TUTORIAL.md); la versione PDF stampabile è
 [docs/Terrain-O-Manuale.pdf](docs/Terrain-O-Manuale.pdf).
+English edition: [README.en.md](README.en.md) and
+[docs/TUTORIAL.en.md](docs/TUTORIAL.en.md).
+L'interfaccia si passa da italiano a inglese con il pulsante **IT/EN** nella barra
+dei menu.
 
 ---
 
@@ -29,8 +33,8 @@ Comandi di qualità:
 ```bash
 npm run typecheck
 npm run lint
-npm test             # Vitest, 64 test
-npx playwright test  # 6 test end-to-end (desktop + mobile + WCAG AA)
+npm test             # Vitest, 112 test
+npx playwright test  # 13 test end-to-end (desktop + mobile + lingua + AI + auto + OSM + WCAG AA)
 npm run check        # lint + typecheck + test + build
 ```
 
@@ -45,7 +49,7 @@ I browser Playwright vanno installati una volta con `npx playwright install chro
 - Shell desktop professionale: menu bar, options bar contestuale, palette strumenti,
   canvas raster + overlay SVG, dock laterali/inferiore, status bar.
 - Pannelli agganciabili e trascinabili: Progetto, OSM, DEM, Percorso, Livelli, Elementi,
-  Proprietà, Classificazione, Vettorizzazione, Storia, Info, Navigatore.
+  Proprietà, Classificazione, Vettorizzazione, Riconoscimento AI, Storia, Info, Navigatore.
 - Layout persistito in `localStorage` (`terrain-o/ui-layout/v1`) e ripristinabile da
   **Visualizza → Reimposta layout pannelli**.
 - Tema scuro coerente, density compatta, font tabellare per coordinate e valori.
@@ -64,7 +68,7 @@ Quattro livelli sempre distinti:
 | Livello | Come nasce | Bordo nel canvas |
 | --- | --- | --- |
 | Sorgente | ortofoto importata | raster, nessun bordo |
-| Automatico | classificazione, OSM, DEM, vettorizzazione | tratteggio sottile neutro |
+| Automatico | classificazione, AI, OSM, DEM, vettorizzazione | tratteggio sottile neutro |
 | Manuale | geometria disegnata/corretta dall'utente | linea piena sottile |
 | Verificato | dichiarazione esplicita dell'utente | linea piena + spunta ✓ |
 
@@ -92,16 +96,106 @@ disegnato già alla risoluzione di lavoro, evitando buffer RGBA da centinaia di 
 riempimento buchi opera sull’intera area chiusa (non solo sulle prime righe), e la confidenza
 combina margine del classificatore, accordo locale e qualità dell’illuminazione.
 
+Il calcolo delle feature è privo di allocazioni per pixel: L\*a\*b\* usa una LUT lineare,
+la varianza 5×5 è un box filter separabile su un bordo replicato di 2 px, LBP e Sobel
+leggono lo stesso buffer senza sampler con clamp. Il filtro di maggioranza usa finestre
+scorrevoli orizzontali e verticali (costo costante per pixel invece di O(r²)), le componenti
+connesse usano una mappa di etichette a due passate, e confidenza, statistiche e overlay
+condividono un’unica passata. L’illuminazione precalcola indici e pesi bilineari.
+
 Tutto gira in un web worker con progressi e cancellazione cooperativa. Il pannello espone
 tutti i parametri, anteprima live debounced, preset locali esportabili in JSON e legenda classi.
+
+**Fusione OSM.** Quando nel progetto ci sono dati OpenStreetMap, la classificazione li usa
+come prior per superpixel: edifici, acqua, bosco, aree aperte, strade e sentieri orientano i
+pixel ambigui, mentre un’immagine netta mantiene la precedenza. Il peso è regolabile nel
+pannello Classificazione. I confini OSM non dichiarano mai un elemento verificato.
+
+### Riconoscimento AI e livello simboli
+
+Il pannello **Riconoscimento AI** aggiunge un modello di machine learning locale, distinto
+dalla pipeline a regole e sempre marcato come sperimentale.
+
+- **Modello**: random forest deterministico su 28 alberi, addestrato in un web worker. Ogni
+  superpixel produce 12 feature (L\*a\*b\*, croma, texture LBP, densità e forza dei bordi,
+  area, riempimento, allungamento, contrasto con i vicini, varianza locale). Le classi sono
+  sei: non classificato, vegetazione, aperto, acqua, artificiale, **edificio**.
+- **Esempi**: le aree OSM e gli elementi disegnati a mano sono etichette forti (peso
+  rispettivamente 0,5–1,1 e 3). Le regole ad alta confidenza diventano pseudo-etichette
+  deboli (peso 0,22–0,45) e si possono disattivare. Senza OSM né aree manuali il modello
+  funziona comunque, ma impara solo dalle regole: è una base di partenza, non una verità.
+- **Validazione**: una quota di esempi viene esclusa dall’addestramento e usata per
+  riportare un accordo holdout, non un’accuratezza reale sul terreno. Il pannello mostra
+  anche il peso delle feature e il numero di campioni.
+- **Alberi**: un rilevatore di chiome (differenza di medie locali, massimi locali e
+  soppressione non massima) crea punti **Albero isolato** dentro la vegetazione. La
+  sensibilità e il numero massimo sono regolabili.
+- **Output**: aree vettorizzate con la stessa pipeline topologica (classi 1–5, edificio
+  incluso) e punti albero, tutti con `source: 'ml'`, confidenza `mlConfidence` e bordo
+  tratteggiato. Nessun elemento AI è verificato.
+
+**Livello simboli unico.** La fusione raccoglie AI, OSM, vettorizzazione e manuale in
+un’unica lista ordinata. Viene eseguita automaticamente al termine del riconoscimento AI e
+quando si generano elementi OSM o vettoriali; **Unifica livello simboli** la riesegue su
+richiesta. Quando due simboli dello stesso tipo si sovrappongono (IoU ≥ 0,4 oppure
+contenimento ≥ 0,8 per le aree, distanza ≤ 6 px per i punti, sovrapposizione ≥ 70% entro
+3,5 px per le linee) resta il più affidabile: verificato, poi manuale/GPX, poi OSM, poi AI,
+poi vettorizzazione. Gli elementi automatici eliminati vengono annotati in `mergedFrom` sul
+sopravvissuto. Manuale e verificato non vengono **mai** rimossi o modificati: se due
+elementi protetti si sovrappongono restano entrambi e il pannello riporta il conflitto.
+La fusione non riscrive coordinate e non tocca il percorso `updateFeatureGeometry`.
+
+**Elaborazione completa in un clic.** Il comando **AI → Elaborazione automatica completa**
+(o **Esegui tutto** nel pannello AI) esegue in sequenza download OSM, generazione degli
+elementi, classificazione con prior OSM, vettorizzazione, riconoscimento AI, curve di livello
+e unificazione del livello simboli. Se una fonte esterna non è disponibile (rete assente,
+immagine non georeferenziata) lo stadio viene saltato o segnalato come avviso e la pipeline
+prosegue con i dati locali; manuale e verificato non vengono mai toccati. Al termine il
+pannello mostra il conteggio per stadio, i duplicati uniti e il totale dei simboli; il
+risultato resta sempre automatico e non verificato.
+
+Limite dichiarato: non è una rete neurale pre-addestrata e non riconosce ogni simbolo ISOM.
+Riconosce copertura, edifici e alberi con la qualità degli esempi disponibili; per questo
+resta materia prima da controllare, non una dichiarazione di percorribilità o conformità IOF.
+
+### OpenStreetMap e fusione automatica
+
+L’import OSM interroga Overpass per edifici, `landuse`, `natural`, `leisure`, `amenity`,
+barriere, ferrovie, strade, corsi d’acqua e alberi, con fallback all’API OSM ufficiale e cache
+locale di 24 ore. I multipoligoni sono ricomposti in anelli chiusi; i fori interni (cortili,
+radure) sono conservati.
+
+- **Genera elementi automatici** crea feature per edifici, acqua, bosco, arbusti, aree aperte,
+superfici artificiali, strade, sentieri, ruscelli e barriere. Sono sempre `source: 'osm'`,
+`verified: false`, con bordo tratteggiato e deduplicazione per ID OSM.
+- **Fusione automatica** esegue in un solo passaggio la generazione degli elementi e la
+classificazione con prior OSM.
+- Dopo la classificazione il pannello mostra l’**accordo OSM**: percentuale complessiva,
+ copertura dell’immagine e accordo per vegetazione, aperto, acqua e artificiale. Un valore
+ basso segnala OSM arretrato o disallineato; non viene corretto automaticamente.
+- Le aree con accordo sotto il 65% vengono elencate singolarmente; un clic seleziona
+ l’elemento OSM generato e lo porta in vista.
+- L’elenco è filtrabile per famiglia (vegetazione, aperto, acqua, artificiale) e per area
+ minima; le righe visibili si esportano in CSV con nome, ID OSM, classe, accordo, area e
+ stato di generazione.
+- Gli alberi OSM diventano punti **Albero isolato** automatici e alimentano anche il prior di vegetazione.
+- Dopo la generazione il livello OSM grezzo viene nascosto: resta visibile un unico livello di simboli, con
+  gli elementi automatici già deduplicati. Riattivalo da Livelli quando serve confrontare la fonte.
+- La classificazione usa gli stessi confini come prior, quindi la vettorizzazione produce
+geometrie più coerenti senza duplicare il lavoro manuale.
+- Le feature OSM esistenti non vengono sovrascritte: una correzione o una verifica manuale
+resta intatta anche dopo un nuovo download.
 
 ### Vettorizzazione
 
 Pipeline pura in `src/vectorize/`, riscritta da zero:
 
 - `maskReader` → maschere per classe con soglia di confidenza;
-- `contourExtractor` → marching squares su griglia continua, anelli chiusi;
-- `topology` → gerarchia esterno/foro/isole annidate e priorità ISOM;
+- `contourExtractor` → marching squares su griglia continua, anelli chiusi; grafo di archi
+  tipizzato con intestazioni per vertice, direzioni intere al posto di `atan2`, chiavi
+  numeriche e rimozione dei vertici collineari in tempo lineare;
+- `topology` → gerarchia esterno/foro/isole annidate e priorità ISOM; containment con
+  bounding box e controllo auto-intersezioni a sweep invece di O(n²);
 - `sharedSimplify` / `simplify` → Chaikin + Douglas-Peucker con controllo auto-intersezioni;
   la cache dei tratti condivisi è **orientata**: ogni anello ripercorre il confine nel proprio
   verso, senza invertire il tratto semplificato dell’anello precedente;
@@ -144,8 +238,9 @@ src/
   io/             import/export progetto, OMAP, GeoJSON, SVG, PNG, PDF, GPX/KML
   render/         scene canvas, provenance, minimappa, compositing export
   classify/       pipeline, regole, SLIC, worker, protocollo
+  ai/             random forest, etichette di training, rilevamento alberi, fusione simboli
   vectorize/      pipeline vettoriale, moduli puri, worker, test property-based
-  osm/            Overpass + API OSM, cache IndexedDB, conversione feature
+  osm/            Overpass + API OSM, cache IndexedDB, semantica, prior e conversione feature
   dem/            terrain tiles AWS, curve di livello
   edit/           hit-test, snapping, geometria
   persistence/    IndexedDB (idb), asset, autosave
@@ -167,9 +262,10 @@ Benchmark incluso nella suite (`src/vectorize/benchmark.test.ts`):
 
 | Prova | Hardware/ambiente | Risultato |
 | --- | --- | --- |
-| Vettorizzazione 4000×4000, 4 classi + non classificato, confini sinusoidali | Windows, Node 24, Vitest/jsdom, singolo thread | **≈3,1–3,6 s** (3.083–3.556 ms nelle misure), 17 poligoni, 0 fori, 0 scartati |
+| Vettorizzazione 4000×4000, 4 classi + non classificato, confini sinusoidali | Windows, Node 24, Vitest/jsdom, singolo thread | **≈3,0–5,0 s**, 17 poligoni, 0 fori, 0 scartati (limite 15 s) |
+| Classificazione 2048×2048, scena sintetica con gradiente e rumore, parametri di default | Windows, Node 24, profilo a stadi fuori dalla suite | **≈1,2 s** (era ≈2,9 s prima dell’ottimizzazione); feature in ≈0,34 s, SLIC ≈0,44 s |
 
-Il limite richiesto di 15 s è rispettato con margine. La classificazione e la vettorizzazione
+Il limite richiesto di 15 s è rispettato con ampio margine. La classificazione e la vettorizzazione
 in app girano in worker e non bloccano il thread UI; immagini molto grandi vengono ridotte
 per la classificazione e risalite in coordinate immagine.
 
@@ -177,16 +273,24 @@ per la classificazione e risalite in coordinate immagine.
 
 ## 5. Test
 
-- `npm test`: **64 test** su 9 file (classificazione, scene golden, vettorizzazione,
-  integrazione pipeline, property-based fast-check, OSM, OMAP, pre-check topologico,
-  benchmark).
-- `npx playwright test`: **6 test E2E**:
+- `npm test`: **112 test** su 19 file (classificazione, scene golden, vettorizzazione,
+  integrazione pipeline, property-based fast-check, random forest, rilevamento alberi,
+  etichette AI, orchestrazione automatica, fusione simboli, schema progetto, OSM e fusione,
+  OMAP, pre-check topologico, riparazione IndexedDB, benchmark).
+- `npx playwright test`: **13 test E2E**:
   1. shell desktop, avvertenza bozza, assenza di marker `?`, legenda spenta;
-  2. import → classificazione → vettorizzazione → validazione topologica;
-  3. verifica dichiarata → modifica geometria → revoca automatica → undo;
-  4. import → disegno area → export OMAP con riferimento in alto a sinistra e y positiva;
-  5. shell mobile: riconoscimento telefono, menu a foglio, drawer, rail strumenti;
-  6. audit WCAG AA con axe su shell, pannelli principali e finestra Esporta.
+  2. menu desktop, comandi e navigazione da tastiera;
+  3. finestra ridotta e cambio lingua IT/EN persistito dopo il reload;
+  4. import in un database IndexedDB lasciato rotto da una build precedente;
+  5. nessuna anteprima di classificazione finché il pannello non viene aperto;
+  6. import → classificazione → vettorizzazione → validazione topologica;
+  7. riconoscimento AI locale → unificazione del livello simboli;
+  8. elaborazione completa in un clic → report per stadio e livello simboli;
+  9. pipeline automatica con OSM simulato → edificio e albero importati e unificati;
+  10. verifica dichiarata → modifica geometria → revoca automatica → undo;
+  11. import → disegno area → export OMAP con riferimento in alto a sinistra e y positiva;
+  12. shell mobile: riconoscimento telefono, menu a foglio, drawer, rail strumenti;
+  13. audit WCAG AA con axe su shell, pannelli principali e finestra Esporta.
 - `npm run typecheck`, `npm run lint`, `npm run build`: puliti.
 
 ---
@@ -195,7 +299,8 @@ per la classificazione e risalite in coordinate immagine.
 
 - Immagini: JPG/PNG; world file `.jgw`, `.jpgw`, `.pgw`, `.pngw`, `.wld`, `.wjf`; `.prj` opzionale.
 - Progetto: JSON versionato (`terrain-o/1.0`) con migrazione Zod.
-- OSM: Overpass (due mirror globali) con fallback all'API OSM ufficiale; cache 24 h in IndexedDB.
+- OSM: Overpass (due mirror globali) con fallback all'API OSM ufficiale; cache 24 h in IndexedDB;
+  edifici, land cover, acqua, viabilità, barriere, ferrovie, alberi e multipoligoni.
 - DEM: AWS Terrain Tiles (Terrarium), quota indicativa.
 - OMAP: XML v9, simboli ISOM semplificati; l'apertura in Mapper 0.9.x va verificata manualmente.
 - OMAP non include i simboli ISOM reali completi (TODO P0 del brief): è una bozza tecnica.
@@ -204,9 +309,11 @@ per la classificazione e risalite in coordinate immagine.
 
 ## 7. Limiti espliciti
 
-- Le classi sono **possibili** classi cromatiche, non riconoscimento semantico.
+- Le classi a regole sono **possibili** classi cromatiche; il riconoscimento AI è un modello
+  locale che dipende dagli esempi e resta comunque un’ipotesi, non una verità sul terreno.
 - La quota DEM è indicativa e può essere obsoleta; non è sicurezza del terreno.
-- OSM è un dato di terze parti, può essere incompleto o arretrato.
+- OSM è un dato di terze parti, può essere incompleto o arretrato. La fusione automatica è
+  un’ipotesi di lavoro: non dichiara percorribilità, vegetazione sotto copertura o conformità IOF.
 - Nessun export è una carta da gara o una dichiarazione IOF.
 - La verifica è solo una dichiarazione dell'utente, non una certificazione del software.
 - La legenda è opzionale e spenta per default; la mappa resta pulita finché non la si cerca.

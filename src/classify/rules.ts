@@ -49,6 +49,13 @@ export interface RuleDecision {
   scores: Record<ClassIndex, number>;
 }
 
+/** External evidence for one superpixel, e.g. an OSM land-cover polygon. */
+export interface PriorHint {
+  classId: ClassIndex;
+  /** Fraction of the superpixel covered by the prior, 0..1. */
+  coverage: number;
+}
+
 const PRIORITY: Record<ClassIndex, number> = { 0: 0, 1: 2, 2: 1, 3: 3, 4: 1 };
 
 function threshold(value: number | undefined, fallback: number): number {
@@ -64,7 +71,11 @@ function clamp01(value: number): number {
  * the exposed L*a*b* thresholds and texture weights; there is no trained model
  * hiding the reason for a class.
  */
-export function classifySignature(signature: SuperpixelSignature, params: ClassificationParams): RuleDecision {
+export function classifySignature(
+  signature: SuperpixelSignature,
+  params: ClassificationParams,
+  prior?: PriorHint | null,
+): RuleDecision {
   const waterBMax = threshold(params.waterBMax, -10);
   const vegAMax = threshold(params.vegAMax, -6);
   const openBMin = threshold(params.openBMin, 18);
@@ -126,6 +137,22 @@ export function classifySignature(signature: SuperpixelSignature, params: Classi
     scores[0] += 0.45;
   }
 
+  // OSM is a prior, not an oracle. When the imagery is decisive the prior can
+  // only break a near tie; when the imagery is ambiguous it may settle the
+  // class. This keeps an outdated building footprint from overriding clear
+  // water, while still using OSM to resolve genuinely uncertain surfaces.
+  let priorApplied = false;
+  if (prior && prior.classId !== 0 && prior.coverage > 0) {
+    let initialBest = 0;
+    for (const key of [3, 1, 4, 2, 0] as ClassIndex[]) {
+      if (scores[key] > initialBest) initialBest = scores[key];
+    }
+    const weight = clamp01(threshold(params.osmPriorWeight, 0.55));
+    const bonus = prior.coverage * weight * (initialBest >= 0.62 ? 0.2 : 0.7);
+    scores[prior.classId] += bonus;
+    priorApplied = bonus > 0;
+  }
+
   let best: ClassIndex = 0;
   let bestScore = -Infinity;
   for (const key of [3, 1, 4, 2, 0] as ClassIndex[]) {
@@ -144,7 +171,11 @@ export function classifySignature(signature: SuperpixelSignature, params: Classi
 
   const second = Math.max(...([0, 1, 2, 3, 4] as ClassIndex[]).filter((key) => key !== best).map((key) => scores[key]));
   const margin = clamp01((bestScore - second) / (bestScore + 0.15));
-  const confidence = clamp01(0.5 + margin * 0.45 + (best === 0 ? -0.1 : 0));
+  let confidence = clamp01(0.5 + margin * 0.45 + (best === 0 ? -0.1 : 0));
+  if (priorApplied && prior) {
+    const agreement = best === prior.classId ? 1 : -1;
+    confidence = clamp01(confidence + agreement * 0.06 * prior.coverage);
+  }
 
   return { classId: best, confidence, scores };
 }

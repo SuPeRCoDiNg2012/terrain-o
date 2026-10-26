@@ -115,6 +115,75 @@ describe('interpretable ISOM rules', () => {
     expect(decision.confidence).toBeLessThanOrEqual(1);
     expect(Object.keys(decision.scores)).toHaveLength(5);
   });
+
+  it('lets an OSM prior settle an ambiguous surface', () => {
+    const ambiguous = {
+      L: 45,
+      a: -10,
+      b: -8,
+      sat: 0.3,
+      value: 0.45,
+      variance: 60,
+      lbp: 0.2,
+      edgeDensity: 0.1,
+    };
+    expect(match(ambiguous).classId).toBe(CLASS_VEG);
+    const withPrior = classifySignature(ambiguous, DEFAULT_CLASSIFICATION_PARAMS, {
+      classId: CLASS_WATER,
+      coverage: 0.9,
+    });
+    expect(withPrior.classId).toBe(CLASS_WATER);
+  });
+
+  it('does not let an outdated OSM prior override decisive imagery', () => {
+    const clearWater = {
+      L: 30,
+      a: 0,
+      b: -30,
+      sat: 0.6,
+      value: 0.5,
+      variance: 10,
+      lbp: 0.1,
+      edgeDensity: 0,
+    };
+    const decision = classifySignature(clearWater, DEFAULT_CLASSIFICATION_PARAMS, {
+      classId: CLASS_ART,
+      coverage: 1,
+    });
+    expect(decision.classId).toBe(CLASS_WATER);
+  });
+});
+
+describe('classification with an external prior map', () => {
+  it('uses a full OSM prior to settle a uniformly ambiguous surface', () => {
+    const width = 64;
+    const height = 64;
+    const [r, g, b] = labToRgb(45, -10, -8);
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    for (let index = 0; index < width * height; index++) {
+      pixels[index * 4] = r;
+      pixels[index * 4 + 1] = g;
+      pixels[index * 4 + 2] = b;
+      pixels[index * 4 + 3] = 255;
+    }
+    const prior = {
+      width,
+      height,
+      classes: new Uint8Array(width * height).fill(CLASS_WATER),
+      strength: new Float32Array(width * height).fill(0.9),
+    };
+    const params = {
+      ...DEFAULT_CLASSIFICATION_PARAMS,
+      maxWorkSide: 256,
+      superpixelSize: 16,
+      slicIterations: 2,
+      majorityWindow: 1,
+      minComponentPx: 0,
+      fillHoles: false,
+    };
+    const result = classifyPixels(pixels, width, height, params, undefined, undefined, prior);
+    expect(result.stats.water).toBeGreaterThan(50);
+  });
 });
 
 describe('morphology', () => {

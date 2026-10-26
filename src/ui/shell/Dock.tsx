@@ -2,12 +2,14 @@ import { useCallback, useRef, useState } from 'react';
 import { PANEL_LABELS, useLayoutStore, type DockSide, type PanelId } from './layoutStore';
 import { useUiStore } from '../uiStore';
 import { useDevice } from '../useDevice';
+import { useT } from '../../i18n';
 import { Icon } from '../components/Icon';
 import { ProjectPanel } from '../components/ProjectPanel';
 import { LayersPanel } from '../components/LayersPanel';
 import { FeatureList } from '../components/FeatureList';
 import { Inspector } from '../components/Inspector';
 import { ClassificationPanel } from '../components/ClassificationPanel';
+import { AiPanel } from '../components/AiPanel';
 import { OsmPanel } from '../components/OsmPanel';
 import { DemPanel } from '../components/DemPanel';
 import { CoursePanel } from '../components/CoursePanel';
@@ -42,6 +44,7 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
   const setLeftOpen = useUiStore((state) => state.setLeftOpen);
   const setRightOpen = useUiStore((state) => state.setRightOpen);
   const device = useDevice();
+  const t = useT();
   const [dropTarget, setDropTarget] = useState(false);
   const [dragging, setDragging] = useState<PanelId | null>(null);
   const dockRef = useRef<HTMLElement>(null);
@@ -88,9 +91,11 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
         case 'properties':
           return <Inspector />;
         case 'classification':
-          return <ClassificationPanel />;
+          return <ClassificationPanel active={!hidden} />;
         case 'vectorize':
           return <VectorizePanel />;
+        case 'ai':
+          return <AiPanel />;
         case 'history':
           return <HistoryPanel />;
         case 'info':
@@ -126,18 +131,18 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
     return (
       <aside
         className={`dock dock-${side} collapsed`}
-        aria-label={`Pannello ${side}`}
+        aria-label={t('Area pannelli {side}', { side: t(side === 'left' ? 'sinistra' : side === 'right' ? 'destra' : 'inferiore') })}
         style={side === 'bottom' ? undefined : { width: 38 }}
       >
         <button
           type="button"
           className="dock-collapsed-label"
           onClick={() => toggleCollapsed(side)}
-          title="Espandi pannello"
-          aria-label="Espandi pannello"
+          title={t('Espandi pannello')}
+          aria-label={t('Espandi pannello')}
         >
           <Icon name="chevronRight" size={14} />
-          <span>{side === 'left' ? 'Progetto' : side === 'right' ? 'Proprietà' : 'Storia'}</span>
+          <span>{t(side === 'left' ? 'Progetto' : side === 'right' ? 'Proprietà' : 'Storia')}</span>
         </button>
       </aside>
     );
@@ -147,7 +152,7 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
     <aside
       ref={dockRef}
       className={`dock dock-${side} ${panels.length === 0 ? 'empty' : ''} ${dropTarget ? 'drop-target' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
-      aria-label={`Area pannelli ${side === 'left' ? 'sinistra' : side === 'right' ? 'destra' : 'inferiore'}`}
+      aria-label={t('Area pannelli {side}', { side: t(side === 'left' ? 'sinistra' : side === 'right' ? 'destra' : 'inferiore') })}
       style={panels.length === 0 ? undefined : side === 'bottom' ? { height: width } : { width }}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes(PANEL_DRAG_TYPE)) {
@@ -166,7 +171,7 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
         if (panel) movePanel(panel, side);
       }}
     >
-      <div className="dock-resizer" onPointerDown={startResize} role="separator" aria-orientation={side === 'bottom' ? 'horizontal' : 'vertical'} title="Trascina per ridimensionare" />
+      <div className="dock-resizer" onPointerDown={startResize} role="separator" aria-orientation={side === 'bottom' ? 'horizontal' : 'vertical'} title={t('Trascina per ridimensionare')} />
 
       <div className="dock-head" hidden={panels.length === 0}>
         <div className="dock-tabs" role="tablist" aria-orientation="horizontal">
@@ -181,7 +186,7 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
               tabIndex={active === panel ? 0 : -1}
               draggable
               className={`dock-tab ${active === panel ? 'active' : ''} ${dragging === panel ? 'dragging' : ''}`}
-              title={`${PANEL_LABELS[panel].label} — trascina per spostare il pannello`}
+              title={`${t(PANEL_LABELS[panel].label)} — ${t('trascina per spostare il pannello')}`}
               onClick={() => setActive(side, panel)}
               onDoubleClick={() => toggleCollapsed(side)}
               onDragStart={(event) => {
@@ -195,7 +200,7 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
                 document.body.classList.remove('dragging-panel');
               }}
             >
-              {PANEL_LABELS[panel].short}
+              {t(PANEL_LABELS[panel].short)}
             </button>
           ))}
         </div>
@@ -204,13 +209,13 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
             type="button"
             className="dock-mobile-close"
             onClick={() => (side === 'left' ? setLeftOpen(false) : setRightOpen(false))}
-            title="Chiudi pannello"
-            aria-label="Chiudi pannello"
+            title={t('Chiudi pannello')}
+            aria-label={t('Chiudi pannello')}
           >
             <Icon name="x" size={15} />
           </button>
         )}
-        <button type="button" className="dock-collapse" onClick={() => toggleCollapsed(side)} title="Comprimi pannello" aria-label="Comprimi pannello">
+        <button type="button" className="dock-collapse" onClick={() => toggleCollapsed(side)} title={t('Comprimi pannello')} aria-label={t('Comprimi pannello')}>
           <Icon name={side === 'bottom' ? 'down' : side === 'left' ? 'left' : 'right'} size={13} />
         </button>
       </div>
@@ -219,7 +224,7 @@ export function Dock({ side, mobileOpen = false, onOpenFilePicker, onImportProje
         {panels.map((panel) => renderPanel(panel, panel !== active))}
         {panels.length === 0 && (
           <p className="shell-note dock-empty">
-            {side === 'bottom' ? 'Rilascia qui un pannello per agganciarlo in basso.' : 'Trascina qui un pannello per agganciarlo.'}
+            {t(side === 'bottom' ? 'Rilascia qui un pannello per agganciarlo in basso.' : 'Trascina qui un pannello per agganciarlo.')}
           </p>
         )}
       </div>

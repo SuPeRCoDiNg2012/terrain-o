@@ -27,7 +27,7 @@ export const PROVENANCE_NOTES = [
   },
   {
     label: 'Interpretazione automatica',
-    text: 'Classificazione, curve di livello e strade OSM sono sperimentali e indicative. Non sono verità sul terreno.',
+    text: 'Classificazione, riconoscimento AI, curve di livello e strade OSM sono sperimentali e indicativi. Non sono verità sul terreno.',
     tone: 'auto',
   },
   {
@@ -169,6 +169,13 @@ export const POINT_TYPES: Record<string, TypeSpec> = {
     isomCode: '706',
     defaultName: 'Arrivo',
   },
+  tree: {
+    label: 'Albero isolato',
+    short: 'Albero',
+    color: '#2f6b3a',
+    kind: 'point',
+    defaultName: 'Albero isolato',
+  },
 };
 
 export const COURSE_TYPES = new Set(['start', 'control', 'finish']);
@@ -275,10 +282,15 @@ export const DEFAULT_CLASSIFICATION_PARAMS: ClassificationParams = {
   vegAMax: -6,
   openBMin: 18,
   artChromaMax: 10,
+  osmPriorEnabled: true,
+  osmPriorWeight: 0.55,
 };
 
 export const CLASSIFICATION_METHOD =
-  'pipeline locale L*a*b* + SLIC + regole ISOM con confidenza e morfologia (non ML, materia prima sperimentale)';
+  'pipeline locale L*a*b* + SLIC + regole ISOM con confidenza e morfologia; prior OSM opzionale (non ML, materia prima sperimentale)';
+
+export const AI_METHOD =
+  'random forest locale su superpixel, addestrato da OSM, elementi manuali e pseudo-etichette; output sperimentale, mai verificato';
 
 export const CLASSIFICATION_STATS_LABELS: Array<{ key: keyof import('./types').ClassificationStats; label: string; color: string }> = [
   { key: 'veg', label: 'Possibile vegetazione', color: '#3f8f4b' },

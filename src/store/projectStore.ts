@@ -10,7 +10,9 @@ import type {
   Project,
 } from '../model/types';
 import {
+  AI_METHOD,
   CLASSIFICATION_METHOD,
+  DEFAULT_CLASSIFICATION_PARAMS,
   MAX_UNDO,
   createEmptyProject,
   createFeature,
@@ -21,6 +23,18 @@ import {
 } from '../model/constants';
 import { classifySource } from '../classify/service';
 import { vectorizeLabels, type VectorizeOptions } from '../vectorize/service';
+import { DEFAULT_VECTORIZE_OPTIONS } from '../vectorize/types';
+import { DEFAULT_AI_OPTIONS, type AiRecognitionOptions } from '../ai/recognize';
+import { recognizeSource } from '../ai/service';
+import { fuseSymbols } from '../ai/fuse';
+import {
+  DEFAULT_AUTO_OPTIONS,
+  autoReportSummary,
+  runAutoPipeline,
+  type AutoPipelineOptions,
+  type AutoPipelineReport,
+  type AutoStage,
+} from '../ai/autoPipeline';
 import { fetchOsmWays } from '../osm/client';
 import { mergeOsmWays, osmWaysToFeatures } from '../osm/convert';
 import { generateContours } from '../dem/service';
@@ -66,9 +80,12 @@ export interface JobState {
 const idleJob = (): JobState => ({ running: false, percent: 0, phase: '', error: null, result: null });
 
 let classificationAbort: AbortController | null = null;
+let aiAbort: AbortController | null = null;
 let vectorAbort: AbortController | null = null;
 let osmAbort: AbortController | null = null;
 let demAbort: AbortController | null = null;
+let autoSequence = 0;
+let autoCancelled = false;
 let loadedClassificationAssetId: string | null = null;
 let classificationLoadSeq = 0;
 
@@ -97,9 +114,12 @@ export interface ProjectState {
   lastSavedAt: string | null;
   storage: StorageEstimate | null;
   classificationJob: JobState;
+  aiJob: JobState;
   vectorJob: JobState;
   osmJob: JobState;
   demJob: JobState;
+  autoJob: JobState;
+  autoReport: AutoPipelineReport | null;
   loadError: string | null;
 
   init: () => Promise<void>;
@@ -173,9 +193,15 @@ export interface ProjectState {
   cancelClassification: () => void;
   runVectorization: (options: VectorizeOptions, mode: 'replace' | 'append') => Promise<number>;
   cancelVectorization: () => void;
+  runAiRecognition: (options?: Partial<AiRecognitionOptions>) => Promise<number>;
+  cancelAiRecognition: () => void;
+  runSymbolFusion: () => number;
+  runAutomaticPipeline: (options?: Partial<AutoPipelineOptions>) => Promise<AutoPipelineReport | null>;
+  cancelAutomaticPipeline: () => void;
   runOsmFetch: (options?: { force?: boolean }) => Promise<void>;
   cancelOsmFetch: () => void;
   convertOsmToFeatures: () => number;
+  runOsmFusion: () => Promise<{ features: number; classified: boolean }>;
   clearOsm: () => void;
   runDemContours: (interval: number) => Promise<void>;
   cancelDemContours: () => void;
@@ -184,6 +210,18 @@ export interface ProjectState {
 }
 
 const now = () => new Date().toISOString();
+
+/**
+ * One symbol layer: every automatic commit is reconciled immediately, so AI,
+ * OSM and vector output never pile up as duplicate overlapping symbols. The
+ * same routine backs the explicit “Unifica livello simboli” action.
+ */
+function fuseDraftSymbols(draft: Project) {
+  const result = fuseSymbols(draft.features);
+  draft.features = result.features;
+  draft.symbolFusion = { createdAt: now(), ...result.stats };
+  return result.stats;
+}
 
 function filterSelection(selection: string[], project: Project): string[] {
   const ids = new Set(project.features.map((f) => f.id));
@@ -264,9 +302,12 @@ const initialState = {
   lastSavedAt: null as string | null,
   storage: null as StorageEstimate | null,
   classificationJob: idleJob(),
+  aiJob: idleJob(),
   vectorJob: idleJob(),
   osmJob: idleJob(),
   demJob: idleJob(),
+  autoJob: idleJob(),
+  autoReport: null as AutoPipelineReport | null,
   loadError: null as string | null,
 };
 
@@ -390,9 +431,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
 
     adoptProject: (project, sourceImage, classificationImage = null, labels = null) => {
       loadedClassificationAssetId = project.classification?.assetId ?? null;
+      autoCancelled = true;
+      autoSequence++;
       const decoded = decodeLabelAsset(labels, project.classification ? project.classification.width * project.classification.height : null);
       set({
         project,
+        autoJob: idleJob(),
+        autoReport: null,
         sourceImage,
         classificationImage,
         classificationLabels: decoded.labels,
@@ -410,6 +455,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     newBlankProject: () => {
       loadedClassificationAssetId = null;
       classificationLoadSeq++;
+      autoCancelled = true;
+      autoSequence++;
       setLastProjectId(null);
       set({
         ...initialState,
@@ -499,7 +546,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     setTool: (activeTool) => set({ activeTool, selection: activeTool === 'select' ? get().selection : [] }),
     setSnapEnabled: (snapEnabled) => set({ snapEnabled }),
     setGridEnabled: (gridEnabled) => set({ gridEnabled }),
-    setGridSize: (gridSize) => set({ gridSize }),
+    setGridSize: (gridSize) => {
+      if (!Number.isFinite(gridSize)) return;
+      set({ gridSize: Math.max(1, Math.min(500, Math.round(gridSize))) });
+    },
     select: (selection) => set({ selection: filterSelection(selection, get().project) }),
     toggleSelect: (id) => {
       const selection = get().selection;
@@ -903,11 +953,20 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         classificationJob: { running: true, percent: 0, phase: 'Avvio classificazione', error: null, result: null },
       });
       try {
-        const output = await classifySource(sourceImage, project.image.width, project.image.height, params, {
-          signal: controller.signal,
-          onProgress: (info) =>
-            set({ classificationJob: { ...get().classificationJob, percent: info.percent, phase: info.phase } }),
-        });
+        const output = await classifySource(
+          sourceImage,
+          project.image.width,
+          project.image.height,
+          params,
+          {
+            signal: controller.signal,
+            onProgress: (info) =>
+              set({ classificationJob: { ...get().classificationJob, percent: info.percent, phase: info.phase } }),
+          },
+          // OSM is used as a prior when present and enabled; the classifier still
+          // owns the decision and the output remains experimental.
+          project.osmWays,
+        );
         if (controller.signal.aborted) return;
         const dataURL = rgbaToDataURL(output.overlay, output.width, output.height);
         const assetId = makeId();
@@ -944,6 +1003,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
           createdAt: now(),
           stats: output.stats,
           params: { ...params },
+          ...(output.osmAgreement ? { osmAgreement: output.osmAgreement } : {}),
+          ...(output.osmContrasts?.length ? { osmContrasts: output.osmContrasts } : {}),
         };
         if (get().sourceImage !== sourceImage) {
           set({ classificationJob: { ...idleJob(), error: 'Immagine cambiata durante la classificazione: risultato scartato.' } });
@@ -1023,19 +1084,22 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
             },
           ),
         );
+        let fusionRemoved = 0;
         get().commit((draft) => {
           if (mode === 'replace') {
             draft.features = draft.features.filter((f) => f.source !== 'vector');
           }
           draft.features.push(...features);
+          fusionRemoved = fuseDraftSymbols(draft).removed;
         });
+        const fusionNote = fusionRemoved ? ` · ${fusionRemoved} duplicati uniti` : '';
         set({
           vectorJob: {
             running: false,
             percent: 100,
             phase: 'Vettorizzazione completata',
             error: null,
-            result: `${features.length} aree generate (${mode === 'replace' ? 'sostituite' : 'aggiunte'})`,
+            result: `${features.length} aree generate (${mode === 'replace' ? 'sostituite' : 'aggiunte'})${fusionNote}`,
           },
         });
         return features.length;
@@ -1057,6 +1121,416 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     },
 
     cancelVectorization: () => vectorAbort?.abort(),
+
+    runAiRecognition: async (options = {}) => {
+      const { sourceImage, project, aiJob } = get();
+      if (!sourceImage || !project.image) {
+        set({ aiJob: { ...idleJob(), error: 'Importare prima un’immagine sorgente.' } });
+        return 0;
+      }
+      if (aiJob.running) return 0;
+      aiAbort?.abort();
+      const controller = new AbortController();
+      aiAbort = controller;
+      const settings = { ...DEFAULT_AI_OPTIONS, ...options };
+      set({ aiJob: { ...idleJob(), running: true, phase: 'Avvio riconoscimento' } });
+      try {
+        const params = project.classification?.params ?? DEFAULT_CLASSIFICATION_PARAMS;
+        const output = await recognizeSource(sourceImage, project, params, settings, {
+          signal: controller.signal,
+          onProgress: (info) =>
+            set({ aiJob: { ...get().aiJob, percent: Math.round(info.percent * 0.9), phase: info.phase } }),
+        });
+        if (controller.signal.aborted) return 0;
+
+        set({ aiJob: { ...get().aiJob, percent: 91, phase: 'Vettorizzazione simboli' } });
+        const vectorOptions: VectorizeOptions = {
+          simplifyTolerance: 1.4,
+          smoothIterations: 2,
+          minAreaPx: 28,
+          minHoleAreaPx: 10,
+          confidenceThreshold: 0.38,
+          hierarchyPriority: true,
+          reconcileEdges: true,
+          categories: [1, 2, 3, 4, 5],
+          fillHoles: true,
+        };
+        const regions = await vectorizeLabels(
+          output.labels,
+          output.width,
+          output.height,
+          vectorOptions,
+          {
+            signal: controller.signal,
+            onProgress: (percent, phase) =>
+              set({
+                aiJob: {
+                  ...get().aiJob,
+                  percent: 91 + Math.round(percent * 0.07),
+                  phase: `Vettorizzazione · ${phase}`,
+                },
+              }),
+          },
+          output.confidence,
+        );
+        if (controller.signal.aborted) return 0;
+        if (get().project.id !== project.id || get().project.image?.assetId !== project.image.assetId) {
+          set({ aiJob: { ...idleJob(), error: 'Progetto o immagine cambiati durante il riconoscimento: risultato scartato.' } });
+          return 0;
+        }
+
+        const image = project.image;
+        const scaleX = image.width / output.width;
+        const scaleY = image.height / output.height;
+        const regionFeatures = regions.map((region) =>
+          createFeature(
+            'area',
+            region.featureType,
+            region.coords.map((point) => ({ x: point.x * scaleX, y: point.y * scaleY })),
+            {
+              holes: region.holes.map((hole) =>
+                hole.map((point) => ({ x: point.x * scaleX, y: point.y * scaleY })),
+              ),
+              source: 'ml',
+              name: `${typeSpec(region.featureType).label} (AI)`,
+              notes: 'Riconosciuto da un modello locale addestrato sui dati del progetto: interpretazione automatica non verificata.',
+              mlConfidence: region.confidence,
+            },
+          ),
+        );
+        const treeFeatures = output.trees.map((tree) =>
+          createFeature('point', 'tree', [{ x: tree.x * scaleX, y: tree.y * scaleY }], {
+            source: 'ml',
+            name: 'Albero isolato (AI)',
+            notes: 'Rilevato sulla chioma nell’ortofoto: punto automatico non verificato.',
+            mlConfidence: tree.confidence,
+          }),
+        );
+        if (!regionFeatures.length && !treeFeatures.length) {
+          throw new Error('Nessun simbolo riconosciuto con i parametri correnti. Aggiungi esempi o abbassa la soglia.');
+        }
+
+        const buildings = regionFeatures.filter((feature) => feature.type === 'building').length;
+        let fusionRemoved = 0;
+        get().commit((draft) => {
+          draft.features = draft.features.filter((feature) => feature.source !== 'ml');
+          draft.features.push(...regionFeatures, ...treeFeatures);
+          draft.ai = {
+            createdAt: now(),
+            samples: output.stats.samples,
+            labelledSamples: output.stats.labelledSamples,
+            validation: output.stats.validation,
+            classes: output.stats.classes,
+            polygons: regionFeatures.length,
+            buildings,
+            trees: treeFeatures.length,
+            method: AI_METHOD,
+            featureImportance: output.stats.featureImportance,
+          };
+          // Automatic fusion: the recognition produces one reconciled symbol
+          // layer instead of leaving AI duplicates over OSM or manual geometry.
+          fusionRemoved = fuseDraftSymbols(draft).removed;
+          draft.layers.features.visible = true;
+        });
+        const keptAi = get().project.features.filter((feature) => feature.source === 'ml').length;
+        const fusionNote = fusionRemoved
+          ? ` · ${fusionRemoved} duplicati uniti in un unico livello`
+          : '';
+        set({
+          aiJob: {
+            running: false,
+            percent: 100,
+            phase: 'Riconoscimento completato',
+            error: null,
+            result: `${regionFeatures.length} aree · ${buildings} edifici · ${treeFeatures.length} alberi · ${output.stats.samples} campioni · validazione ${output.stats.validation.toFixed(1)}%${fusionNote}`,
+          },
+        });
+        return keptAi;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          set({ aiJob: { ...idleJob(), phase: 'Riconoscimento annullato' } });
+          return 0;
+        }
+        set({
+          aiJob: {
+            ...idleJob(),
+            error: error instanceof Error ? error.message : 'Errore durante il riconoscimento AI.',
+          },
+        });
+        return 0;
+      } finally {
+        if (aiAbort === controller) aiAbort = null;
+      }
+    },
+
+    cancelAiRecognition: () => aiAbort?.abort(),
+
+    runSymbolFusion: () => {
+      const project = get().project;
+      if (!project.features.length) {
+        set({ aiJob: { ...idleJob(), error: 'Nessun elemento da unificare.' } });
+        return 0;
+      }
+      let stats: ReturnType<typeof fuseDraftSymbols> | null = null;
+      get().commit((draft) => {
+        stats = fuseDraftSymbols(draft);
+      });
+      const resolved = stats ?? fuseSymbols(project.features).stats;
+      const conflictNote = resolved.protectedConflicts
+        ? ` · ${resolved.protectedConflicts} conflitti protetti lasciati intatti`
+        : '';
+      set({
+        aiJob: {
+          ...get().aiJob,
+          error: null,
+          result: resolved.removed
+            ? `Livello simboli unificato: ${resolved.removed} duplicati rimossi, ${resolved.after} elementi${conflictNote}.`
+            : `Nessun duplicato automatico: ${resolved.after} elementi già unici${conflictNote}.`,
+        },
+      });
+      return resolved.removed;
+    },
+
+    runAutomaticPipeline: async (partialOptions = {}) => {
+      const settings: AutoPipelineOptions = { ...DEFAULT_AUTO_OPTIONS, ...partialOptions };
+      const { sourceImage, project } = get();
+      if (!sourceImage || !project.image) {
+        set({ autoJob: { ...idleJob(), error: 'Importare prima un’immagine sorgente.' } });
+        return null;
+      }
+      if (get().autoJob.running) return null;
+      const busy = [
+        get().classificationJob,
+        get().vectorJob,
+        get().aiJob,
+        get().osmJob,
+        get().demJob,
+      ].some((job) => job.running);
+      if (busy) {
+        set({ autoJob: { ...idleJob(), error: 'Attendere la fine dell’elaborazione in corso.' } });
+        return null;
+      }
+
+      const startProjectId = project.id;
+      const startAssetId = project.image.assetId;
+      const runId = ++autoSequence;
+      autoCancelled = false;
+      const cancelled = () =>
+        autoCancelled ||
+        runId !== autoSequence ||
+        get().project.id !== startProjectId ||
+        get().project.image?.assetId !== startAssetId;
+      const report: AutoPipelineReport = {
+        osmWays: 0,
+        osmFeatures: 0,
+        classified: false,
+        classificationSize: null,
+        polygons: 0,
+        aiFeatures: 0,
+        buildings: 0,
+        trees: 0,
+        contours: 0,
+        fusedRemoved: 0,
+        totalFeatures: project.features.length,
+        warnings: [],
+        durationMs: 0,
+      };
+      const progress = (percent: number, phase: string) => {
+        if (cancelled()) return;
+        set({
+          autoJob: {
+            ...get().autoJob,
+            running: true,
+            percent: Math.max(0, Math.min(100, Math.round(percent))),
+            phase,
+          },
+        });
+      };
+      set({
+        autoJob: { ...idleJob(), running: true, percent: 1, phase: 'Preparazione' },
+        autoReport: null,
+      });
+
+      const stages: AutoStage[] = [
+        {
+          id: 'osm',
+          label: 'OpenStreetMap',
+          weight: 2,
+          skip: () => {
+            if (!settings.fetchOsm) return 'download OSM disattivato';
+            if (!get().project.imageBBox || !get().project.worldFile) return 'immagine non georeferenziata';
+            return null;
+          },
+          run: async () => {
+            await get().runOsmFetch();
+            if (cancelled()) return { ok: false };
+            report.osmWays = get().project.osmWays.length;
+            const job = get().osmJob;
+            if (job.error) return { ok: false, warning: `OSM: ${job.error}` };
+            return {
+              ok: true,
+              count: report.osmWays,
+              warning: report.osmWays === 0 ? 'OSM: nessun elemento nel bbox' : undefined,
+            };
+          },
+        },
+        {
+          id: 'osm-features',
+          label: 'Elementi OSM',
+          weight: 1,
+          skip: () => (get().project.osmWays.length ? null : 'nessun dato OSM'),
+          run: async () => {
+            const added = get().convertOsmToFeatures();
+            if (cancelled()) return { ok: false };
+            report.osmFeatures = get().project.features.filter((feature) => feature.source === 'osm').length;
+            return { ok: true, count: added };
+          },
+        },
+        {
+          id: 'classification',
+          label: 'Classificazione',
+          weight: 4,
+          run: async () => {
+            const base = get().project.classification?.params ?? DEFAULT_CLASSIFICATION_PARAMS;
+            await get().runClassification({ ...base, osmPriorEnabled: get().project.osmWays.length > 0 });
+            if (cancelled()) return { ok: false };
+            const job = get().classificationJob;
+            if (job.error) return { ok: false, warning: `Classificazione: ${job.error}` };
+            const classification = get().project.classification;
+            if (!classification) return { ok: false, warning: 'Classificazione: nessun risultato' };
+            report.classified = true;
+            report.classificationSize = `${classification.width}×${classification.height}`;
+            return { ok: true };
+          },
+        },
+        {
+          id: 'vectorize',
+          label: 'Vettorizzazione',
+          weight: 3,
+          skip: () => {
+            if (!settings.vectorize) return 'vettorizzazione disattivata';
+            return get().project.classification ? null : 'classificazione assente';
+          },
+          run: async () => {
+            const count = await get().runVectorization(
+              { ...DEFAULT_VECTORIZE_OPTIONS, hierarchyPriority: true, reconcileEdges: true },
+              'replace',
+            );
+            if (cancelled()) return { ok: false };
+            report.polygons = count;
+            const job = get().vectorJob;
+            if (job.error) return { ok: false, warning: `Vettorizzazione: ${job.error}` };
+            return { ok: true, count, warning: count ? undefined : 'Vettorizzazione: nessuna area generata' };
+          },
+        },
+        {
+          id: 'ai',
+          label: 'Riconoscimento AI',
+          weight: 4,
+          skip: () => (settings.recognize ? null : 'riconoscimento AI disattivato'),
+          run: async () => {
+            const count = await get().runAiRecognition({ ...DEFAULT_AI_OPTIONS });
+            if (cancelled()) return { ok: false };
+            report.aiFeatures = count;
+            report.buildings = get().project.ai?.buildings ?? 0;
+            report.trees = get().project.ai?.trees ?? 0;
+            const job = get().aiJob;
+            return job.error
+              ? { ok: false, warning: `AI: ${job.error}` }
+              : { ok: true, count, warning: count ? undefined : 'AI: nessun simbolo generato' };
+          },
+        },
+        {
+          id: 'contours',
+          label: 'Curve di livello',
+          weight: 2,
+          skip: () => {
+            if (!settings.contours) return 'curve di livello disattivate';
+            return get().project.imageBBox ? null : 'immagine non georeferenziata';
+          },
+          run: async () => {
+            await get().runDemContours(get().project.contourInterval || 10);
+            if (cancelled()) return { ok: false };
+            report.contours = get().project.contours.length;
+            const job = get().demJob;
+            return job.error
+              ? { ok: false, warning: `DEM: ${job.error}` }
+              : { ok: true, count: report.contours };
+          },
+        },
+        {
+          id: 'fusion',
+          label: 'Livello simboli unico',
+          weight: 1,
+          skip: () => (get().project.features.length ? null : 'nessun simbolo da unificare'),
+          run: async () => {
+            const removed = get().runSymbolFusion();
+            if (cancelled()) return { ok: false };
+            report.fusedRemoved = removed;
+            report.totalFeatures = get().project.features.length;
+            return { ok: true, count: removed };
+          },
+        },
+      ];
+
+      try {
+        const outcome = await runAutoPipeline(stages, { onProgress: progress, isCancelled: cancelled });
+        report.warnings = outcome.warnings;
+        report.durationMs = outcome.durationMs;
+        report.osmWays = get().project.osmWays.length;
+        report.osmFeatures = get().project.features.filter((feature) => feature.source === 'osm').length;
+        report.totalFeatures = get().project.features.length;
+        if (outcome.cancelled) {
+          // A project or image change invalidates this run; do not touch the
+          // new project's view or report state.
+          if (runId === autoSequence && get().project.id === startProjectId) {
+            set({
+              autoReport: report,
+              autoJob: { ...idleJob(), phase: 'Elaborazione annullata', result: null },
+            });
+          }
+          return report;
+        }
+        // The resulting symbol layer is the working view: show it and the
+        // classification overlay, without changing provenance or verification.
+        get().apply((draft) => {
+          draft.layers.features.visible = true;
+          if (draft.classification) draft.layers.classification.visible = true;
+          if (draft.contours.length) draft.layers.contours.visible = true;
+        });
+        const summary = autoReportSummary(report);
+        set({
+          autoReport: report,
+          autoJob: {
+            running: false,
+            percent: 100,
+            phase: 'Elaborazione completata',
+            error: null,
+            result: summary,
+          },
+        });
+        return report;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Errore durante l’elaborazione automatica.';
+        report.warnings.push(message);
+        if (runId === autoSequence && get().project.id === startProjectId) {
+          set({
+            autoReport: report,
+            autoJob: { ...idleJob(), error: message },
+          });
+        }
+        return report;
+      }
+    },
+
+    cancelAutomaticPipeline: () => {
+      autoCancelled = true;
+      get().cancelOsmFetch();
+      get().cancelClassification();
+      get().cancelVectorization();
+      get().cancelAiRecognition();
+      get().cancelDemContours();
+    },
 
     runOsmFetch: async (options = {}) => {
       const { project, osmJob } = get();
@@ -1117,11 +1591,42 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         set({ osmJob: { ...get().osmJob, result: 'Nessun nuovo tracciato da convertire.' } });
         return 0;
       }
+      let fusionRemoved = 0;
       get().commit((draft) => {
         draft.features.push(...added);
+        fusionRemoved = fuseDraftSymbols(draft).removed;
+        // The unified symbol layer replaces the raw source layer on screen;
+        // it can be shown again from the Layers panel when needed.
+        draft.layers.osm.visible = false;
       });
-      set({ osmJob: { ...get().osmJob, result: `${added.length} tracciati convertiti in elementi cartografici` } });
+      const fusionNote = fusionRemoved ? ` ${fusionRemoved} duplicati automatici uniti.` : '';
+      set({
+        osmJob: {
+          ...get().osmJob,
+          result: `${added.length} elementi automatici generati da OSM (edifici, alberi, acqua, verde, strade, sentieri). Livello OSM grezzo nascosto. Non verificati.${fusionNote}`,
+        },
+      });
       return added.length;
+    },
+
+    runOsmFusion: async () => {
+      const project = get().project;
+      if (!project.osmWays.length) {
+        set({ osmJob: { ...idleJob(), error: 'Nessun dato OSM da fondere. Importare prima OpenStreetMap.' } });
+        return { features: 0, classified: false };
+      }
+      const features = get().convertOsmToFeatures();
+      if (!get().sourceImage || !project.image) {
+        return { features, classified: false };
+      }
+      if (get().classificationJob.running) {
+        return { features, classified: false };
+      }
+      await get().runClassification({
+        ...(project.classification?.params ?? DEFAULT_CLASSIFICATION_PARAMS),
+        osmPriorEnabled: true,
+      });
+      return { features, classified: !get().classificationJob.error && get().classificationJob.percent === 100 };
     },
 
     clearOsm: () => {

@@ -9,6 +9,8 @@ import {
 import { metersPerPixel } from '../geo/projection';
 import { courseRoute } from '../geo/projection';
 import { featureProvenance } from '../render/provenance';
+import { osmSemanticOf } from '../osm/semantic';
+import { osmAreaStyle, osmLineStyle } from '../osm/style';
 
 function esc(value: string): string {
   return value
@@ -103,16 +105,19 @@ export function exportProjectSvg(project: Project, images: RenderImages): string
     } else if (layerId === 'osm' && project.osmWays.length) {
       const paths = project.osmWays
         .map((way) => {
-          const stroke =
-            way.kind === 'waterway'
-              ? '#0284c7'
-              : ['path', 'footway', 'track', 'bridleway', 'cycleway', 'steps'].includes(way.highway ?? '')
-                ? '#be185d'
-                : '#b45309';
-          const dash = ['path', 'footway', 'track', 'bridleway', 'cycleway', 'steps'].includes(way.highway ?? '')
-            ? ` stroke-dasharray="${num(lineUnit * 4)} ${num(lineUnit * 3)}"`
-            : '';
-          return `<path d="${ringPath(way.coords, false)}" fill="none" stroke="${stroke}" stroke-width="${num(lineUnit * 1.2)}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
+          const info = osmSemanticOf(way);
+          if (way.kind === 'tree' || info.semantic === 'tree') {
+            const point = way.coords[0];
+            return `<circle cx="${num(point.x)}" cy="${num(point.y)}" r="${num(lineUnit * 1.7)}" fill="#3f8f4b" stroke="#14201a" stroke-width="${num(lineUnit * 0.5)}"/>`;
+          }
+          if (info.area && way.coords.length >= 3) {
+            const style = osmAreaStyle(info.semantic);
+            const holes = (way.holes ?? []).map((hole) => ringPath(hole, true)).join(' ');
+            return `<path d="${ringPath(way.coords, true)} ${holes}" fill="${style.fill}" stroke="${style.stroke}" stroke-width="${num(lineUnit)}" fill-rule="evenodd" stroke-linejoin="round"/>`;
+          }
+          const style = osmLineStyle(info.semantic);
+          const dash = style.dash ? ` stroke-dasharray="${style.dash.map((value) => num(lineUnit * value)).join(' ')}"` : '';
+          return `<path d="${ringPath(way.coords, false)}" fill="none" stroke="${style.stroke}" stroke-width="${num(lineUnit * style.width)}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
         })
         .join('');
       layerGroups.push(`<g${opacity}>${paths}</g>`);

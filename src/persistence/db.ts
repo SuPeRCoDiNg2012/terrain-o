@@ -2,7 +2,11 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { AssetRecord, OsmCacheEntry, Project, ProjectSummary } from '../model/types';
 
 const DB_NAME = 'terrain-o';
-const DB_VERSION = 1;
+// v3 repairs databases created by any earlier build whose object stores used
+// out-of-line keys. Those stores reject every `put(value)` with a DataError and
+// made any import fail with "the object store uses out-of-line keys". The bump
+// also covers interim databases that already reached version 2.
+export const DB_VERSION = 3;
 const LAST_PROJECT_KEY = 'terrain-o:last-project';
 
 interface BackupRecord {
@@ -35,29 +39,222 @@ interface TerrainDB extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<TerrainDB>> | null = null;
 
+type StoreName = 'projects' | 'assets' | 'backups' | 'osmCache';
+
+interface StoreSpec {
+  keyPath: string;
+  indexes: Array<{ name: string; keyPath: string }>;
+}
+
+const STORE_SPECS: Record<StoreName, StoreSpec> = {
+  projects: { keyPath: 'id', indexes: [{ name: 'by-updated', keyPath: 'updatedAt' }] },
+  assets: { keyPath: 'id', indexes: [] },
+  backups: { keyPath: 'key', indexes: [{ name: 'by-project', keyPath: 'projectId' }] },
+  osmCache: { keyPath: 'key', indexes: [] },
+};
+
+const STORE_NAMES = Object.keys(STORE_SPECS) as StoreName[];
+
+/**
+ * Early builds created one or more stores without an inline key path. Those
+ * stores reject every `put(value)` with a DataError, which surfaced during
+ * import as "the object store uses out-of-line keys". IndexedDB cannot change
+ * a key path in place, and a store cannot be renamed, so the repair reads the
+ * records, deletes the store, recreates it correctly and writes them back —
+ * all inside the same versionchange transaction.
+ */
+function migrateSchema(database: IDBDatabase, transaction: IDBTransaction): void {
+  for (const name of STORE_NAMES) {
+    const spec = STORE_SPECS[name];
+    if (!database.objectStoreNames.contains(name)) {
+      const created = database.createObjectStore(name, { keyPath: spec.keyPath });
+      for (const index of spec.indexes) created.createIndex(index.name, index.keyPath);
+      continue;
+    }
+
+    const existing = transaction.objectStore(name);
+    if (existing.keyPath == null || String(existing.keyPath) !== spec.keyPath) {
+      rebuildStore(database, name, spec, existing);
+      continue;
+    }
+    for (const index of spec.indexes) {
+      if (!existing.indexNames.contains(index.name)) existing.createIndex(index.name, index.keyPath);
+    }
+  }
+}
+
+function rebuildStore(
+  database: IDBDatabase,
+  name: StoreName,
+  spec: StoreSpec,
+  existing: IDBObjectStore,
+): void {
+  const valuesRequest = existing.getAll();
+  const keysRequest = existing.getAllKeys();
+  let values: unknown[] | null = null;
+  let keys: IDBValidKey[] | null = null;
+  let rebuilt = false;
+
+  const rebuild = () => {
+    if (rebuilt || values === null || keys === null) return;
+    rebuilt = true;
+    database.deleteObjectStore(name);
+    const store = database.createObjectStore(name, { keyPath: spec.keyPath });
+    for (const index of spec.indexes) store.createIndex(index.name, index.keyPath);
+    values.forEach((value, position) => {
+      if (!value || typeof value !== 'object') return;
+      const record: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+      const oldKey = keys?.[position];
+      if (record[spec.keyPath] == null && oldKey != null) record[spec.keyPath] = oldKey;
+      // A record without a usable key cannot live in an inline-key store;
+      // skip it instead of aborting the whole migration.
+      if (record[spec.keyPath] == null) return;
+      store.put(record);
+    });
+  };
+
+  valuesRequest.onsuccess = () => {
+    values = valuesRequest.result as unknown[];
+    rebuild();
+  };
+  keysRequest.onsuccess = () => {
+    keys = keysRequest.result as IDBValidKey[];
+    rebuild();
+  };
+}
+
+function isVersionError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'VersionError';
+}
+
+function blockedError(): Error {
+  return new Error('Database locale bloccato da un’altra scheda aperta: chiuderla e riprovare.');
+}
+
+/**
+ * Opens the database at `version` with the migration handler, then closes it.
+ * Resolves with the version actually stored on disk. A VersionError means that
+ * a newer build already owns the database; callers inspect it instead.
+ */
+function migrateDatabase(version: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, version);
+    let settled = false;
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    request.onupgradeneeded = () => {
+      const transaction = request.transaction;
+      if (!transaction) return;
+      try {
+        migrateSchema(request.result, transaction);
+      } catch (error) {
+        transaction.abort();
+        fail(error);
+      }
+    };
+    request.onerror = () => fail(request.error ?? new Error('Impossibile aprire il database locale.'));
+    request.onblocked = () => fail(blockedError());
+    request.onsuccess = () => {
+      const database = request.result;
+      if (settled) {
+        database.close();
+        return;
+      }
+      settled = true;
+      resolve(database.version);
+      database.close();
+    };
+  });
+}
+
+interface SchemaInspection {
+  version: number;
+  broken: boolean;
+}
+
+/** Reads the stored key paths without changing the schema. */
+function inspectSchema(): Promise<SchemaInspection> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME);
+    request.onupgradeneeded = () => {
+      // migrateDatabase always creates the database first, so this open is
+      // read-only. Aborting keeps it that way even if that assumption breaks.
+      request.transaction?.abort();
+    };
+    request.onerror = () => reject(request.error ?? new Error('Impossibile leggere lo schema locale.'));
+    request.onblocked = () => reject(blockedError());
+    request.onsuccess = () => {
+      const database = request.result;
+      let broken = false;
+      for (const name of STORE_NAMES) {
+        if (!database.objectStoreNames.contains(name)) {
+          broken = true;
+          break;
+        }
+        const transaction = database.transaction(name);
+        if (String(transaction.objectStore(name).keyPath) !== STORE_SPECS[name].keyPath) {
+          broken = true;
+          break;
+        }
+      }
+      const version = database.version;
+      database.close();
+      resolve({ version, broken });
+    };
+  });
+}
+
+/**
+ * Makes sure the stored schema matches STORE_SPECS. Databases created by an
+ * interim build can already sit at DB_VERSION while still having out-of-line
+ * stores, so a plain version bump is not enough: if the schema is still broken
+ * after the regular migration, rebuild at current version + 1.
+ */
+async function ensureSchema(): Promise<void> {
+  if (typeof indexedDB === 'undefined') return;
+  try {
+    await migrateDatabase(DB_VERSION);
+  } catch (error) {
+    // A newer build already owns the database: inspect it instead of failing.
+    if (!isVersionError(error)) throw error;
+  }
+
+  const inspection = await inspectSchema();
+  if (!inspection.broken) return;
+  await migrateDatabase(inspection.version + 1);
+}
+
 export function openTerrainDB(): Promise<IDBPDatabase<TerrainDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<TerrainDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains('projects')) {
-          const projects = db.createObjectStore('projects', { keyPath: 'id' });
-          projects.createIndex('by-updated', 'updatedAt');
-        }
-        if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('backups')) {
-          const backups = db.createObjectStore('backups', { keyPath: 'key' });
-          backups.createIndex('by-project', 'projectId');
-        }
-        if (!db.objectStoreNames.contains('osmCache')) db.createObjectStore('osmCache', { keyPath: 'key' });
-      },
+    const opening = (async () => {
+      await ensureSchema();
+      // No explicit version: open whatever version the schema repair settled
+      // on instead of risking a VersionError against a newer database.
+      return openDB<TerrainDB>(DB_NAME);
+    })();
+    // A blocked or failed opening must not poison every later attempt.
+    opening.catch(() => {
+      if (dbPromise === opening) dbPromise = null;
     });
+    dbPromise = opening;
   }
   return dbPromise;
 }
 
 /** Used only by tests to obtain a fresh connection. */
-export function resetDbConnection(): void {
+export async function resetDbConnection(): Promise<void> {
+  const connection = dbPromise;
   dbPromise = null;
+  if (!connection) return;
+  try {
+    (await connection).close();
+  } catch {
+    // A failed opening has nothing to close.
+  }
 }
 
 export class StorageQuotaError extends Error {

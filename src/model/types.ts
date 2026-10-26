@@ -21,7 +21,7 @@ export interface LayerState {
 
 export type FeatureKind = 'area' | 'line' | 'point';
 
-export type FeatureSource = 'manual' | 'osm' | 'vector' | 'gpx' | 'dem';
+export type FeatureSource = 'manual' | 'osm' | 'vector' | 'gpx' | 'dem' | 'ml';
 
 export interface VerificationEvent {
   at: string;
@@ -50,6 +50,10 @@ export interface Feature {
   code?: string;
   source?: FeatureSource;
   osmId?: number;
+  /** Model probability of the winning class, 0..1. Only for source "ml". */
+  mlConfidence?: number;
+  /** Automatic features merged into this one by the symbol fusion pass. */
+  mergedFrom?: string[];
 }
 
 export type ProjectionSource = 'wkt' | 'assumed-wgs84' | 'degrees' | 'none';
@@ -124,6 +128,34 @@ export interface ClassificationParams {
   openBMin?: number;
   /** Artificial surfaces require chroma at or below this value. */
   artChromaMax?: number;
+  /** Use OpenStreetMap areas and lines as a classifier prior. */
+  osmPriorEnabled?: boolean;
+  /** 0..1 weight of the OSM prior; imagery remains the primary source. */
+  osmPriorWeight?: number;
+}
+
+export interface ClassificationOsmAgreement {
+  /** Percentage of prior-covered pixels whose final class matches OSM. */
+  overall: number;
+  /** Percentage of the image covered by a meaningful OSM prior. */
+  covered: number;
+  priorPixels: number;
+  /** Agreement percentage per classifier family. */
+  byClass: { veg: number; open: number; water: number; art: number };
+  /** Number of prior pixels per classifier family. */
+  classPixels: { veg: number; open: number; water: number; art: number };
+}
+
+export interface ClassificationOsmContrast {
+  osmId: number;
+  name: string;
+  /** Human label of the OSM semantic family. */
+  label: string;
+  classKey: 'veg' | 'open' | 'water' | 'art';
+  /** Percentage of polygon pixels whose final class matches OSM. */
+  agreement: number;
+  /** Number of classification pixels inside the polygon. */
+  areaPx: number;
 }
 
 export interface ClassificationMeta {
@@ -135,6 +167,39 @@ export interface ClassificationMeta {
   createdAt: string;
   stats: ClassificationStats;
   params: ClassificationParams;
+  /** Optional because projects classified before OSM fusion have no report. */
+  osmAgreement?: ClassificationOsmAgreement;
+  /** Small list of OSM areas whose final class disagrees with OSM. */
+  osmContrasts?: ClassificationOsmContrast[];
+}
+
+export interface AiRecognitionMeta {
+  createdAt: string;
+  /** Superpixel samples used for training (real labels + pseudo-labels). */
+  samples: number;
+  /** Samples that came from OSM or manual geometry, not from rules. */
+  labelledSamples: number;
+  /** Holdout accuracy in percent, measured on samples excluded from training. */
+  validation: number;
+  classes: number;
+  polygons: number;
+  buildings: number;
+  trees: number;
+  method: string;
+  /** Normalized feature importances, highest first. */
+  featureImportance: Array<{ name: string; value: number }>;
+}
+
+export interface SymbolFusionMeta {
+  createdAt: string;
+  before: number;
+  after: number;
+  removed: number;
+  mergedGroups: number;
+  /** Duplicates where both elements were manual or verified: kept untouched. */
+  protectedConflicts: number;
+  /** Final count per fusable symbol type. */
+  byType: Record<string, number>;
 }
 
 export interface CalibrationSample {
@@ -152,13 +217,38 @@ export interface Calibration {
   extraSamples?: CalibrationSample[];
 }
 
+export type OsmKind =
+  | 'highway'
+  | 'waterway'
+  | 'building'
+  | 'landuse'
+  | 'natural'
+  | 'leisure'
+  | 'amenity'
+  | 'barrier'
+  | 'railway'
+  | 'tree';
+
 export interface OsmWay {
   id: number;
-  kind: 'highway' | 'waterway';
+  kind: OsmKind;
   highway?: string;
   waterway?: string;
+  building?: string;
+  landuse?: string;
+  natural?: string;
+  leisure?: string;
+  amenity?: string;
+  barrier?: string;
+  railway?: string;
+  /** Raw OSM tags kept for semantic fusion (building, landuse, natural...). */
+  tags?: Record<string, string>;
   name?: string;
   coords: Point[];
+  /** True for closed OSM ways and assembled multipolygon rings. */
+  closed?: boolean;
+  /** Inner rings, used by multipolygon relations and building courtyards. */
+  holes?: Point[][];
 }
 
 export interface ContourLine {
@@ -197,6 +287,10 @@ export interface Project {
   contourInterval: number;
   course: CourseSettings;
   geoWarnings: string[];
+  /** Last local ML run. Always experimental, never a verification. */
+  ai?: AiRecognitionMeta;
+  /** Last symbol-level deduplication pass. */
+  symbolFusion?: SymbolFusionMeta;
 }
 
 export interface AssetRecord {

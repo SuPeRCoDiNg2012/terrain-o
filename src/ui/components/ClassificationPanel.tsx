@@ -26,7 +26,7 @@ function withDefaults(params: ClassificationParams): ClassificationParams {
   return { ...DEFAULT_CLASSIFICATION_PARAMS, ...params };
 }
 
-export function ClassificationPanel() {
+export function ClassificationPanel({ active = true }: { active?: boolean }) {
   const project = useProjectStore((state) => state.project);
   const sourceImage = useProjectStore((state) => state.sourceImage);
   const labels = useProjectStore((state) => state.classificationLabels);
@@ -68,12 +68,12 @@ export function ClassificationPanel() {
   useEffect(() => () => setClassificationPreview(null), [setClassificationPreview]);
 
   useEffect(() => {
-    if (!previewOnMap || !preview?.dataURL) {
+    if (!active || !previewOnMap || !preview?.dataURL) {
       setClassificationPreview(null);
       return;
     }
     setClassificationPreview(preview.dataURL);
-  }, [preview?.dataURL, previewOnMap, setClassificationPreview]);
+  }, [active, preview?.dataURL, previewOnMap, setClassificationPreview]);
 
   const update = <K extends keyof ClassificationParams>(key: K, value: ClassificationParams[K]) => {
     setParams((previous) => ({ ...previous, [key]: value }));
@@ -89,7 +89,7 @@ export function ClassificationPanel() {
     previewAbort.current = controller;
     setPreview({ dataURL: '', loading: true, error: null });
     try {
-      const result = await previewClassification(sourceImage, params, controller.signal);
+      const result = await previewClassification(sourceImage, params, controller.signal, project.osmWays);
       if (controller.signal.aborted) return;
       setPreview({ dataURL: result.dataURL, stats: result.stats, loading: false, error: null });
     } catch (error) {
@@ -99,11 +99,18 @@ export function ClassificationPanel() {
   };
 
   useEffect(() => {
+    // The dock keeps every panel mounted; without this guard importing an
+    // image would start a classification preview (and paint it on the map)
+    // even when the user never opened this tab.
+    if (!active) {
+      previewAbort.current?.abort();
+      return;
+    }
     if (!livePreview || !sourceImage) return;
     const timer = window.setTimeout(() => void doPreview(), 340);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, livePreview, sourceImage]);
+  }, [active, params, livePreview, sourceImage, project.osmWays]);
 
   const start = async () => {
     if (!sourceImage) {
@@ -160,6 +167,31 @@ export function ClassificationPanel() {
 
       <Toggle label="Anteprima live" checked={livePreview} onChange={setLivePreview} description="Ricalcolo debounced sul worker" />
       <Toggle label="Anteprima su mappa" checked={previewOnMap} onChange={setPreviewOnMap} description="Sovrapposizione semitrasparente, non modificabile" />
+
+      {project.osmWays.length > 0 && (
+        <>
+          <SectionTitle icon="map">Integrazione OSM</SectionTitle>
+          <Toggle
+            label="Usa OSM come prior"
+            checked={params.osmPriorEnabled ?? true}
+            onChange={(next) => update('osmPriorEnabled', next)}
+            description={`${project.osmWays.length} elementi disponibili`}
+          />
+          <SliderField
+            label="Peso del prior OSM"
+            value={value('osmPriorWeight', 0.55)}
+            min={0}
+            max={1}
+            step={0.05}
+            display={`${Math.round(value('osmPriorWeight', 0.55) * 100)}%`}
+            onChange={(next) => update('osmPriorWeight', next)}
+            reset={() => update('osmPriorWeight', 0.55)}
+          />
+          <p className="shell-note">
+            I confini OSM orientano solo i pixel ambigui: l’immagine resta la fonte primaria e nessun elemento diventa verificato.
+          </p>
+        </>
+      )}
 
       {preview?.loading && <ProgressBar percent={45} label="Anteprima" />}
       {preview?.error && <p className="field-error">{preview.error}</p>}
@@ -226,6 +258,12 @@ export function ClassificationPanel() {
               <StatBar key={entry.key} label={entry.label} value={project.classification?.stats[entry.key] ?? 0} color={entry.color} />
             ))}
           </div>
+          {project.classification.osmAgreement && (
+            <p className="shell-note">
+              Accordo OSM: {project.classification.osmAgreement.overall.toFixed(1)}% sui pixel con prior
+              ({project.classification.osmAgreement.covered.toFixed(1)}% dell’immagine).
+            </p>
+          )}
           <div className="button-row">
             <button
               type="button"

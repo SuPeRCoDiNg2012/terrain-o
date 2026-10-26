@@ -112,11 +112,36 @@ export function segmentsIntersect(a: Point, b: Point, c: Point, d: Point): boole
 export function ringSelfIntersects(points: Point[]): boolean {
   const n = points.length;
   if (n < 4) return false;
-  for (let i = 0; i < n; i++) {
+
+  // Sweep over segment bounding boxes instead of testing all n² pairs. Long
+  // simplified rings (thousands of vertices) were quadratic here, and this
+  // check runs on every polygon before export.
+  const minX = new Float64Array(n);
+  const maxX = new Float64Array(n);
+  const minY = new Float64Array(n);
+  const maxY = new Float64Array(n);
+  for (let index = 0; index < n; index++) {
+    const a = points[index];
+    const b = points[(index + 1) % n];
+    minX[index] = Math.min(a.x, b.x);
+    maxX[index] = Math.max(a.x, b.x);
+    minY[index] = Math.min(a.y, b.y);
+    maxY[index] = Math.max(a.y, b.y);
+  }
+
+  const order = new Array<number>(n);
+  for (let index = 0; index < n; index++) order[index] = index;
+  order.sort((a, b) => minX[a] - minX[b]);
+
+  for (let position = 0; position < n; position++) {
+    const i = order[position];
     const a = points[i];
     const b = points[(i + 1) % n];
-    for (let j = i + 1; j < n; j++) {
-      if (j === i || j === (i + 1) % n || (j + 1) % n === i) continue;
+    for (let next = position + 1; next < n; next++) {
+      const j = order[next];
+      if (minX[j] > maxX[i]) break;
+      if (j === (i + 1) % n || (j + 1) % n === i) continue;
+      if (minY[j] > maxY[i] || maxY[j] < minY[i]) continue;
       const c = points[j];
       const d = points[(j + 1) % n];
       if (segmentsIntersect(a, b, c, d)) return true;
@@ -145,6 +170,11 @@ interface HierarchyNode {
   area: number;
   depth: number;
   holes: HierarchyNode[];
+  /** Bounding box, used to reject containment candidates in O(1). */
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
 }
 
 /**
@@ -158,8 +188,18 @@ export function assemblePolygons(rings: ClassifiedRing[]): RawPolygon[] {
     if (points.length < 3) continue;
     const area = ringArea(points);
     if (area < 0.75) continue;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const point of points) {
+      if (point.x < minX) minX = point.x;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.y > maxY) maxY = point.y;
+    }
     const list = byClass.get(ring.classId) ?? [];
-    list.push({ ring: { ...ring, points }, area, depth: 0, holes: [] });
+    list.push({ ring: { ...ring, points }, area, depth: 0, holes: [], minX, minY, maxX, maxY });
     byClass.set(ring.classId, list);
   }
 
@@ -175,6 +215,14 @@ export function assemblePolygons(rings: ClassifiedRing[]): RawPolygon[] {
       for (const candidate of nodes) {
         if (candidate === node) continue;
         if (candidate.area <= node.area) continue;
+        if (
+          probe.x < candidate.minX ||
+          probe.x > candidate.maxX ||
+          probe.y < candidate.minY ||
+          probe.y > candidate.maxY
+        ) {
+          continue;
+        }
         if (pointInRing(probe, candidate.ring.points)) {
           if (!parent || candidate.area < parent.area) parent = candidate;
         }

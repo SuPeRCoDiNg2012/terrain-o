@@ -9,9 +9,26 @@ ctx.onmessage = (event: MessageEvent<ClassifyRequest>) => {
   if (msg.type !== 'classify') return;
   try {
     const rgba = new Uint8ClampedArray(msg.pixels);
-    const result = classifyPixels(rgba, msg.width, msg.height, msg.params, (percent, phase) => {
-      ctx.postMessage({ type: 'progress', id: msg.id, phase, percent } satisfies ClassifyResponse);
-    });
+    const prior =
+      msg.priorClasses && msg.priorStrength
+        ? {
+            width: msg.width,
+            height: msg.height,
+            classes: new Uint8Array(msg.priorClasses),
+            strength: new Float32Array(msg.priorStrength),
+          }
+        : null;
+    const result = classifyPixels(
+      rgba,
+      msg.width,
+      msg.height,
+      msg.params,
+      (percent, phase) => {
+        ctx.postMessage({ type: 'progress', id: msg.id, phase, percent } satisfies ClassifyResponse);
+      },
+      undefined,
+      prior,
+    );
     const response: ClassifyResponse = {
       type: 'result',
       id: msg.id,

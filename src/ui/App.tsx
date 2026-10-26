@@ -20,6 +20,7 @@ import { Icon } from './components/Icon';
 import { ImportCancelledError, importImageFiles } from '../io/importProject';
 import { importProjectFile } from '../io/projectFile';
 import { saveProject } from '../persistence/db';
+import { translate, useLocaleStore } from '../i18n';
 
 function initialOnboarding(): boolean {
   try {
@@ -54,8 +55,15 @@ export function App() {
   const setRightOpen = useUiStore((state) => state.setRightOpen);
   const optionsBar = useLayoutStore((state) => state.optionsBar);
   const device = useDevice();
+  const locale = useLocaleStore((state) => state.locale);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.title = translate(locale, 'Terrain / O — Bozza preliminare');
+  }, [locale]);
 
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportFocus, setExportFocus] = useState<string | undefined>(undefined);
   const [helpOpen, setHelpOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(initialOnboarding);
   const [importPhase, setImportPhase] = useState<string | null>(null);
@@ -65,6 +73,8 @@ export function App() {
   const savedUpdatedAtRef = useRef<string | null>(null);
   const hydratedOnceRef = useRef(false);
   const latestProjectRef = useRef(project);
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   latestProjectRef.current = project;
 
   useEffect(() => {
@@ -169,7 +179,13 @@ export function App() {
         );
         adoptProject(prepared.project, prepared.sourceImage);
         setImportPhase(null);
-        toast(`Immagine ${prepared.project.image?.width}×${prepared.project.image?.height} px importata.`, 'success');
+        toast(
+          translate(localeRef.current, 'Immagine {w}×{h} px importata.', {
+            w: prepared.project.image?.width ?? 0,
+            h: prepared.project.image?.height ?? 0,
+          }),
+          'success',
+        );
         for (const warning of prepared.warnings) toast(warning, 'warning');
       } catch (error) {
         setImportPhase(null);
@@ -197,6 +213,10 @@ export function App() {
       if (document.querySelector('.dialog-backdrop')) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      // Menu navigation owns the keyboard while a dropdown is open: otherwise
+      // ArrowDown would nudge features and Delete could destroy the selection
+      // behind the menu.
+      if (document.querySelector('.menu-popup') || target?.closest('.menu-bar')) return;
       const state = useProjectStore.getState();
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
@@ -347,7 +367,10 @@ export function App() {
     >
       <MenuBar
         onOpenFilePicker={openFilePicker}
-        onOpenExport={() => setExportOpen(true)}
+        onOpenExport={(focus) => {
+          setExportFocus(focus);
+          setExportOpen(true);
+        }}
         onOpenHelp={() => setHelpOpen(true)}
         onOpenOnboarding={() => setOnboardingOpen(true)}
         onSaveNow={() => void saveNow()}
@@ -478,7 +501,15 @@ export function App() {
           }}
         />
       )}
-      {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
+      {exportOpen && (
+        <ExportModal
+          initialFocus={exportFocus}
+          onClose={() => {
+            setExportOpen(false);
+            setExportFocus(undefined);
+          }}
+        />
+      )}
       <DialogHost />
       <ToastHost />
     </div>

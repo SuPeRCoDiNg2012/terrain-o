@@ -124,22 +124,6 @@ function buildGrid(
   return { cols, rows, stride, gains: smooth, confidence: smoothConfidence, gainMin, gainMax };
 }
 
-function sampleGrid(grid: Grid, x: number, y: number, values: Float32Array): number {
-  const fx = Math.max(0, Math.min(grid.cols - 1, (x - grid.stride / 2) / grid.stride));
-  const fy = Math.max(0, Math.min(grid.rows - 1, (y - grid.stride / 2) / grid.stride));
-  const x0 = Math.floor(fx);
-  const y0 = Math.floor(fy);
-  const x1 = Math.min(grid.cols - 1, x0 + 1);
-  const y1 = Math.min(grid.rows - 1, y0 + 1);
-  const tx = fx - x0;
-  const ty = fy - y0;
-  const a = values[y0 * grid.cols + x0];
-  const b = values[y0 * grid.cols + x1];
-  const c = values[y1 * grid.cols + x0];
-  const d = values[y1 * grid.cols + x1];
-  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
-}
-
 /**
  * Corrects uneven illumination with overlapping local tiles. It scales luminance
  * only: chroma is preserved, so a uniformly green forest is not desaturated the
@@ -156,16 +140,52 @@ export function correctIllumination(
   const confidence = new Float32Array(width * height);
   const strength = Math.max(0, Math.min(1, options.strength));
 
+  // Bilinear cell indices and weights are the same for every row: compute the
+  // horizontal part once instead of clamping and dividing twice per pixel.
+  const x0s = new Int32Array(width);
+  const x1s = new Int32Array(width);
+  const wx1 = new Float32Array(width);
+  const wx0 = new Float32Array(width);
+  for (let x = 0; x < width; x++) {
+    const fx = Math.max(0, Math.min(grid.cols - 1, (x - grid.stride / 2) / grid.stride));
+    const x0 = Math.floor(fx);
+    x0s[x] = x0;
+    x1s[x] = Math.min(grid.cols - 1, x0 + 1);
+    wx1[x] = fx - x0;
+    wx0[x] = 1 - wx1[x];
+  }
+
   for (let y = 0; y < height; y++) {
+    const fy = Math.max(0, Math.min(grid.rows - 1, (y - grid.stride / 2) / grid.stride));
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(grid.rows - 1, y0 + 1);
+    const ty = fy - y0;
+    const wy0 = 1 - ty;
+    const row0 = y0 * grid.cols;
+    const row1 = y1 * grid.cols;
+    const outputRow = y * width;
+
     for (let x = 0; x < width; x++) {
-      const index = y * width + x;
-      const gain = 1 + (sampleGrid(grid, x, y, grid.gains) - 1) * strength;
+      const index = outputRow + x;
+      const xa = x0s[x];
+      const xb = x1s[x];
+      const right = wx1[x];
+      const left = wx0[x];
+
+      const gain =
+        (grid.gains[row0 + xa] * left + grid.gains[row0 + xb] * right) * wy0 +
+        (grid.gains[row1 + xa] * left + grid.gains[row1 + xb] * right) * ty;
+      const localConfidence =
+        (grid.confidence[row0 + xa] * left + grid.confidence[row0 + xb] * right) * wy0 +
+        (grid.confidence[row1 + xa] * left + grid.confidence[row1 + xb] * right) * ty;
+
+      const applied = 1 + (gain - 1) * strength;
       const offset = index * 4;
-      output[offset] = rgba[offset] * gain;
-      output[offset + 1] = rgba[offset + 1] * gain;
-      output[offset + 2] = rgba[offset + 2] * gain;
+      output[offset] = rgba[offset] * applied;
+      output[offset + 1] = rgba[offset + 1] * applied;
+      output[offset + 2] = rgba[offset + 2] * applied;
       output[offset + 3] = rgba[offset + 3];
-      confidence[index] = sampleGrid(grid, x, y, grid.confidence);
+      confidence[index] = localConfidence;
     }
   }
 

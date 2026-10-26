@@ -1,5 +1,7 @@
 import type { ClassificationParams, ClassificationStats, Point } from '../model/types';
 import type { PolygonalRegion, VectorizeOptions, VectorizeStats } from '../vectorize/types';
+import type { AiRecognitionOptions, AiRecognitionStats } from '../ai/recognize';
+import type { DetectedTree } from '../ai/trees';
 
 export interface ClassifyRequest {
   type: 'classify';
@@ -9,6 +11,10 @@ export interface ClassifyRequest {
   pixels: ArrayBuffer;
   params: ClassificationParams;
   preview?: boolean;
+  /** Optional OSM prior at working resolution, one byte per pixel. */
+  priorClasses?: ArrayBuffer;
+  /** Optional OSM prior strength, one float per pixel. */
+  priorStrength?: ArrayBuffer;
 }
 
 export type ClassifyResponse =
@@ -20,6 +26,32 @@ export type ClassifyResponse =
       labels: ArrayBuffer;
       confidence: ArrayBuffer;
       stats: ClassificationStats;
+      width: number;
+      height: number;
+    }
+  | { type: 'error'; id: string; message: string };
+
+export interface AiRequest {
+  type: 'ai-recognize';
+  id: string;
+  width: number;
+  height: number;
+  pixels: ArrayBuffer;
+  trainLabels: ArrayBuffer;
+  trainWeights: ArrayBuffer;
+  params: ClassificationParams;
+  options: AiRecognitionOptions;
+}
+
+export type AiResponse =
+  | { type: 'progress'; id: string; phase: string; percent: number }
+  | {
+      type: 'result';
+      id: string;
+      labels: ArrayBuffer;
+      confidence: ArrayBuffer;
+      trees: DetectedTree[];
+      stats: AiRecognitionStats;
       width: number;
       height: number;
     }

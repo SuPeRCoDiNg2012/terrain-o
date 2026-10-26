@@ -13,6 +13,7 @@ import { APP_VERSION, PRINT_SCALES, PROVENANCE_NOTES } from '../../model/constan
 import { confirmDialog } from '../dialogStore';
 import { toast } from '../toastStore';
 import { useUiStore } from '../uiStore';
+import { useLocale, useT } from '../../i18n';
 import { DebouncedTextField, InfoNote, SectionTitle, Toggle } from './fields';
 import { Icon } from './Icon';
 
@@ -23,9 +24,9 @@ interface ProjectPanelProps {
   onOpenHelp: () => void;
 }
 
-function dateLabel(iso: string): string {
+function dateLabel(iso: string, locale: string): string {
   try {
-    return new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+    return new Date(iso).toLocaleString(locale === 'it' ? 'it-IT' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' });
   } catch {
     return iso;
   }
@@ -52,6 +53,8 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
   const gridSize = useProjectStore((state) => state.gridSize);
   const setGridSize = useProjectStore((state) => state.setGridSize);
   const setLeftOpen = useUiStore((state) => state.setLeftOpen);
+  const t = useT();
+  const locale = useLocale();
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [quotaError, setQuotaError] = useState<string | null>(null);
@@ -88,7 +91,8 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
   }, [refreshStorage, lastSavedAt]);
 
   useEffect(() => {
-    if (saveError) setQuotaError(saveError);
+    // Clear a stale quota warning after a successful save as well.
+    setQuotaError(saveError ?? null);
   }, [saveError]);
 
   const chooseCalibration = () => {
@@ -137,12 +141,16 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
       confirmLabel: 'Apri progetto',
     });
     if (!ok) return;
-    const loaded = await loadProjectById(id);
-    if (loaded) {
-      toast('Progetto aperto.', 'success');
-      void refreshProjects();
-    } else {
-      toast('Impossibile aprire il progetto selezionato.', 'error');
+    try {
+      const loaded = await loadProjectById(id);
+      if (loaded) {
+        toast('Progetto aperto.', 'success');
+        void refreshProjects();
+      } else {
+        toast('Impossibile aprire il progetto selezionato.', 'error');
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Impossibile aprire il progetto selezionato.', 'error');
     }
   };
 
@@ -173,17 +181,17 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
   return (
     <div className="panel-content">
       <section className="panel-hero">
-        <div className="eyebrow">Progetto locale</div>
+        <div className="eyebrow">{t('Progetto locale')}</div>
         <h2>{project.name}</h2>
-        <p className="tiny muted">Nessun account. Dati in IndexedDB sul dispositivo; il progetto non viene sincronizzato.</p>
+        <p className="tiny muted">{t('Nessun account. Dati in IndexedDB sul dispositivo; il progetto non viene sincronizzato.')}</p>
       </section>
 
       <section className="panel-section">
-        <SectionTitle icon="image" aside={<span className="badge badge-source">Sorgente</span>}>Immagine sorgente</SectionTitle>
+        <SectionTitle icon="image" aside={<span className="badge badge-source">{t('Sorgente')}</span>}>{t('Immagine sorgente')}</SectionTitle>
         {project.image ? (
           <div className="image-card">
             {sourceImage ? (
-              <img src={sourceImage.src} alt={`Anteprima ${project.image.name}`} className="image-thumb" />
+              <img src={sourceImage.src} alt={t('Anteprima {name}', { name: project.image.name })} className="image-thumb" />
             ) : (
               <div className="image-thumb placeholder"><Icon name="image" /></div>
             )}
@@ -193,13 +201,13 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
                 {project.image.width} × {project.image.height} px
                 {project.image.originalWidth !== project.image.width ? ` · originale ${project.image.originalWidth}×${project.image.originalHeight}` : ''}
               </span>
-              <span className="tiny muted">Salvata come JPEG q.85 · non modificata dall'editor</span>
+              <span className="tiny muted">{t("Salvata come JPEG q.85 · non modificata dall'editor")}</span>
               <div className="inline-actions">
                 <button type="button" className="btn btn-secondary btn-small" onClick={onOpenFilePicker} data-testid="replace-image">
-                  <Icon name="import" size={15} /> Sostituisci
+                  <Icon name="import" size={15} /> {t('Sostituisci')}
                 </button>
                 <button type="button" className="btn btn-ghost btn-small" onClick={onOpenExport}>
-                  <Icon name="export" size={15} /> Esporta
+                  <Icon name="export" size={15} /> {t('Esporta')}
                 </button>
               </div>
             </div>
@@ -207,14 +215,14 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
         ) : (
           <button type="button" className="dropzone" onClick={onOpenFilePicker}>
             <Icon name="image" size={26} />
-            <strong>Importa ortofoto</strong>
+            <strong>{t('Importa ortofoto')}</strong>
             <span>JPG/PNG + world file + .prj</span>
-            <span className="tiny muted">La sorgente resta non modificabile.</span>
+            <span className="tiny muted">{t('La sorgente resta non modificabile.')}</span>
           </button>
         )}
         {project.image && (
           <p className="tiny muted">
-            La compressione JPEG è applicata solo per contenere lo spazio locale. Le geometrie restano riferite ai pixel dell'immagine importata.
+            {t("La compressione JPEG è applicata solo per contenere lo spazio locale. Le geometrie restano riferite ai pixel dell'immagine importata.")}
           </p>
         )}
       </section>
@@ -222,17 +230,16 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
       <section className="panel-section">
         <SectionTitle icon="map" aside={
           <span className={`badge ${project.imageBBox ? 'badge-verified' : 'badge-warning'}`}>
-            {project.imageBBox ? 'georeferenziata' : 'pixel'}
-          </span>
-        }>Georeferenziazione</SectionTitle>
+            {t(project.imageBBox ? 'georeferenziata' : 'pixel')}
+          </span>          }>{t('Georeferenziazione')}</SectionTitle>
         {project.worldFile ? (
           <div className="data-list">
-            <div><span>World file</span><strong className="mono">{worldFileUnits(project.worldFile) === 'degrees' ? 'gradi' : 'metri'}</strong></div>
-            <div><span>Proiezione</span><strong>
-              {project.projectionSource === 'wkt' ? 'WKT da .prj'
-                : project.projectionSource === 'assumed-wgs84' ? 'EPSG:4326 assunto'
-                  : project.projectionSource === 'degrees' ? 'WGS84 (gradi)'
-                    : 'non disponibile'}
+            <div><span>World file</span><strong className="mono">{t(worldFileUnits(project.worldFile) === 'degrees' ? 'gradi' : 'metri')}</strong></div>
+            <div><span>{t('Proiezione')}</span><strong>
+              {project.projectionSource === 'wkt' ? t('WKT da .prj')
+                : project.projectionSource === 'assumed-wgs84' ? t('EPSG:4326 assunto')
+                  : project.projectionSource === 'degrees' ? t('WGS84 (gradi)')
+                    : t('non disponibile')}
             </strong></div>
             <div className="mono tiny">A {project.worldFile.A.toPrecision(8)} · E {project.worldFile.E.toPrecision(8)}</div>
             <div className="mono tiny">C {project.worldFile.C.toPrecision(10)} · F {project.worldFile.F.toPrecision(10)}</div>
@@ -248,19 +255,19 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
           </div>
         ) : (
           <InfoNote tone="warning">
-            Nessuna georeferenziazione: le misure sono in pixel. Le funzioni OSM e DEM restano disattivate.
+            {t('Nessuna georeferenziazione: le misure sono in pixel. Le funzioni OSM e DEM restano disattivate.')}
           </InfoNote>
         )}
         {project.geoWarnings.length > 0 && (
           <ul className="warning-list">
             {project.geoWarnings.map((warning, index) => (
-              <li key={index}><Icon name="alert" size={14} /> {warning}</li>
+              <li key={index}><Icon name="alert" size={14} /> {t(warning)}</li>
             ))}
           </ul>
         )}
         {project.projectionWKT && (
           <details className="details">
-            <summary>WKT della proiezione</summary>
+            <summary>{t('WKT della proiezione')}</summary>
             <pre className="code-block">{project.projectionWKT.slice(0, 1200)}</pre>
           </details>
         )}
@@ -269,53 +276,58 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
       <section className="panel-section">
         <SectionTitle icon="calibrate" aside={
           <span className={`badge ${calibration ? 'badge-verified' : 'badge-neutral'}`}>
-            {calibration ? calibration.method === 'least-squares' ? `${1 + (calibration.extraSamples?.length ?? 0)} misure` : '2 punti' : 'non calibrata'}
+            {calibration
+              ? calibration.method === 'least-squares'
+                ? t('{n} misure', { n: 1 + (calibration.extraSamples?.length ?? 0) })
+                : t('2 punti')
+              : t('non calibrata')}
           </span>
-        }>Scala e stampa</SectionTitle>
+        }>{t('Scala e stampa')}</SectionTitle>
         <div className="data-list">
-          <div><span>Scala operativa</span><strong>{mpp ? `${mpp.toFixed(mpp < 1 ? 3 : 2)} m/px` : 'misure in pixel'}</strong></div>
-          <div><span>Origine scala</span><strong>{calibration ? 'calibrazione manuale (prioritaria)' : mpp ? 'georeferenziazione' : 'nessuna'}</strong></div>
+          <div><span>{t('Scala operativa')}</span><strong>{mpp ? `${mpp.toFixed(mpp < 1 ? 3 : 2)} m/px` : t('misure in pixel')}</strong></div>
+          <div><span>{t('Origine scala')}</span><strong>{t(calibration ? 'calibrazione manuale (prioritaria)' : mpp ? 'georeferenziazione' : 'nessuna')}</strong></div>
           {paperWidth != null && paperHeight != null && (
-            <div><span>Stampa 1:{project.printScale}</span><strong>{paperWidth.toFixed(1)} × {paperHeight.toFixed(1)} mm</strong></div>
+            <div><span>{t('Stampa 1:{scale}', { scale: project.printScale })}</span><strong>{paperWidth.toFixed(1)} × {paperHeight.toFixed(1)} mm</strong></div>
           )}
         </div>
         <div className="inline-actions">
           <button type="button" className="btn btn-secondary btn-small" onClick={chooseCalibration} disabled={!project.image} data-testid="calibrate-button">
-            <Icon name="calibrate" size={16} /> {calibration ? 'Aggiungi misura' : 'Calibra 2 punti'}
+            <Icon name="calibrate" size={16} /> {t(calibration ? 'Aggiungi misura' : 'Calibra 2 punti')}
           </button>
           {calibration && (
             <button type="button" className="btn btn-ghost btn-small" onClick={() => void removeCalibration()}>
-              Rimuovi calibrazione
+              {t('Rimuovi calibrazione')}
             </button>
           )}
         </div>
         <p className="tiny muted">
-          Con più misure la scala viene stimata ai minimi quadrati. Se non calibri e non sei georeferenziato, tutte le misure restano in pixel.
+          {t('Con più misure la scala viene stimata ai minimi quadrati. Se non calibri e non sei georeferenziato, tutte le misure restano in pixel.')}
         </p>
         <div className="field-row">
           <div className="field">
-            <label className="field-label" htmlFor="print-scale">Scala di stampa</label>
+            <label className="field-label" htmlFor="print-scale">{t('Scala di stampa')}</label>
             <select id="print-scale" className="select-input" value={project.printScale} onChange={(event) => setPrintScale(Number(event.target.value))}>
               {PRINT_SCALES.map((scale) => <option key={scale} value={scale}>1:{scale}</option>)}
             </select>
           </div>
         </div>
         <Toggle
-          label="Mostra freccia nord"
+          label={t('Mostra freccia nord')}
           checked={project.showNorth}
           onChange={setShowNorth}
-          description="Indica solo l'orientamento della sorgente, non un nord geografico verificato."
+          description={t("Indica solo l'orientamento della sorgente, non un nord geografico verificato.")}
         />
       </section>
 
       <section className="panel-section">
-        <SectionTitle icon="wand">Aggancio e griglia</SectionTitle>
-        <Toggle label="Snap ai vertici esistenti" checked={snapEnabled} onChange={setSnapEnabled} description="Raggio 10 px sullo schermo." />
-        <Toggle label="Snap alla griglia" checked={gridEnabled} onChange={setGridEnabled} />
+        <SectionTitle icon="wand">{t('Aggancio e griglia')}</SectionTitle>
+        <Toggle label={t('Snap ai vertici esistenti')} checked={snapEnabled} onChange={setSnapEnabled} description={t('Raggio 10 px sullo schermo.')} />
+        <Toggle label={t('Snap alla griglia')} checked={gridEnabled} onChange={setGridEnabled} />
         <div className="field-row">
           <div className="field">
-            <label className="field-label" htmlFor="grid-size">Passo griglia</label>
+            <label className="field-label" htmlFor="grid-size">{t('Passo griglia')}</label>
             <select id="grid-size" className="select-input" value={gridSize} onChange={(event) => setGridSize(Number(event.target.value))} disabled={!gridEnabled}>
+              {![5, 10, 25].includes(gridSize) && <option value={gridSize}>{gridSize} px</option>}
               <option value={5}>5 px</option>
               <option value={10}>10 px</option>
               <option value={25}>25 px</option>
@@ -325,34 +337,34 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
       </section>
 
       <section className="panel-section">
-        <SectionTitle icon="shield">Livelli di provenienza</SectionTitle>
+        <SectionTitle icon="shield">{t('Livelli di provenienza')}</SectionTitle>
         <div className="provenance-cards">
           {PROVENANCE_NOTES.map((note) => (
             <div key={note.label} className={`provenance-card tone-${note.tone}`}>
-              <strong>{note.label}</strong>
-              <p>{note.text}</p>
+              <strong>{t(note.label)}</strong>
+              <p>{t(note.text)}</p>
             </div>
           ))}
         </div>
         <button type="button" className="text-link" onClick={onOpenHelp}>
-          Limiti del prodotto e criteri di utilizzo →
+          {t('Limiti del prodotto e criteri di utilizzo →')}
         </button>
       </section>
 
       <section className="panel-section">
         <SectionTitle icon="layers" aside={
-          <button type="button" className="text-link" onClick={() => void refreshProjects()}>Aggiorna</button>
-        }>Progetti locali</SectionTitle>
+          <button type="button" className="text-link" onClick={() => void refreshProjects()}>{t('Aggiorna')}</button>
+        }>{t('Progetti locali')}</SectionTitle>
         <div className="project-list">
-          {projects.length === 0 && <p className="tiny muted">Nessun progetto salvato. Un progetto compare qui dopo il primo import.</p>}
+          {projects.length === 0 && <p className="tiny muted">{t('Nessun progetto salvato. Un progetto compare qui dopo il primo import.')}</p>}
           {projects.map((summary) => (
             <div key={summary.id} className={`project-row ${summary.id === project.id ? 'current' : ''}`}>
               <button type="button" className="project-open" onClick={() => void openProject(summary.id)}>
                 <span className="project-row-name">{summary.name}</span>
-                <span className="tiny muted">{dateLabel(summary.updatedAt)} · {summary.featureCount} elementi</span>
+                <span className="tiny muted">{dateLabel(summary.updatedAt, locale)} · {t('{n} elementi', { n: summary.featureCount })}</span>
               </button>
-              {summary.id === project.id && <span className="badge badge-source">aperto</span>}
-              <button type="button" className="icon-button danger-hover" aria-label={`Elimina ${summary.name}`} onClick={() => void removeProject(summary)} disabled={!summary.hasImage && summary.id !== project.id && false}>
+              {summary.id === project.id && <span className="badge badge-source">{t('aperto')}</span>}
+              <button type="button" className="icon-button danger-hover" aria-label={t('Elimina {name}', { name: summary.name })} onClick={() => void removeProject(summary)}>
                 <Icon name="trash" size={15} />
               </button>
             </div>
@@ -360,16 +372,16 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
         </div>
         <div className="inline-actions">
           <button type="button" className="btn btn-secondary btn-small" onClick={() => void handleNewProject()}>
-            <Icon name="plus" size={15} /> Nuovo progetto
+            <Icon name="plus" size={15} /> {t('Nuovo progetto')}
           </button>
           <button type="button" className="btn btn-ghost btn-small" onClick={() => jsonInputRef.current?.click()}>
-            <Icon name="import" size={15} /> Importa .json
+            <Icon name="import" size={15} /> {t('Importa .json')}
           </button>
           <input
             ref={jsonInputRef}
             type="file"
             accept=".json,.terrain-o.json,application/json"
-            aria-label="Importa un file di progetto terrain-o.json"
+            aria-label={t('Importa un file di progetto terrain-o.json')}
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -381,43 +393,43 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
       </section>
 
       <section className="panel-section">
-        <SectionTitle icon="shield" aside={<span className="badge badge-neutral">IndexedDB</span>}>Spazio locale</SectionTitle>
+        <SectionTitle icon="shield" aside={<span className="badge badge-neutral">IndexedDB</span>}>{t('Spazio locale')}</SectionTitle>
         {storage?.supported ? (
           <>
             <div className="storage-line">
-              <span>{formatBytes(storage.usage)} usati</span>
-              <span className="muted">su {formatBytes(storage.quota)}</span>
+              <span>{t('{size} usati', { size: formatBytes(storage.usage) })}</span>
+              <span className="muted">{t('su {size}', { size: formatBytes(storage.quota) })}</span>
             </div>
             <div className="storage-track"><span style={{ width: `${quotaPercent}%` }} /></div>
             <p className="tiny muted">
-              Immagine e classificazione sono in store separati: l'autosalvataggio riscrive solo il progetto leggero. Se lo spazio finisce, esporta il progetto e libera i progetti non usati.
+              {t("Immagine e classificazione sono in store separati: l'autosalvataggio riscrive solo il progetto leggero. Se lo spazio finisce, esporta il progetto e libera i progetti non usati.")}
             </p>
           </>
         ) : (
-          <p className="tiny muted">Stima dello spazio non disponibile in questo browser. Il salvataggio locale resta attivo.</p>
+          <p className="tiny muted">{t('Stima dello spazio non disponibile in questo browser. Il salvataggio locale resta attivo.')}</p>
         )}
         {(quotaError || saveError) && (
           <InfoNote tone="danger">
             {quotaError || saveError}
-            <button type="button" className="text-link" onClick={onOpenExport}>Esporta ora il progetto →</button>
+            <button type="button" className="text-link" onClick={onOpenExport}>{t('Esporta ora il progetto →')}</button>
           </InfoNote>
         )}
         <button type="button" className="btn btn-ghost btn-small" onClick={() => void refreshStorage()}>
-          Aggiorna stima spazio
+          {t('Aggiorna stima spazio')}
         </button>
       </section>
 
       <section className="panel-section">
-        <SectionTitle icon="help">Informazioni</SectionTitle>
+        <SectionTitle icon="help">{t('Informazioni')}</SectionTitle>
         <div className="data-list">
-          <div><span>Formato progetto</span><strong className="mono">terrain-o/1.0</strong></div>
-          <div><span>Versione app</span><strong className="mono">{APP_VERSION}</strong></div>
+          <div><span>{t('Formato progetto')}</span><strong className="mono">terrain-o/1.0</strong></div>
+          <div><span>{t('Versione app')}</span><strong className="mono">{APP_VERSION}</strong></div>
           <div>
-            <span>Ultimo salvataggio</span>
-            <strong>{lastSavedAt ? dateLabel(lastSavedAt) : project.image || project.features.length ? 'autosalvataggio locale attivo' : 'nessun dato'}</strong>
+            <span>{t('Ultimo salvataggio')}</span>
+            <strong>{lastSavedAt ? dateLabel(lastSavedAt, locale) : t(project.image || project.features.length ? 'autosalvataggio locale attivo' : 'nessun dato')}</strong>
           </div>
         </div>
-        <DebouncedTextField label="Rinomina progetto" value={project.name} onCommit={setName} />
+        <DebouncedTextField label={t('Rinomina progetto')} value={project.name} onCommit={setName} />
       </section>
     </div>
   );

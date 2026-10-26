@@ -6,83 +6,47 @@ export interface ContourRing {
   orientation: 'cw' | 'ccw';
 }
 
-interface EdgeStore {
-  fromX: number[];
-  fromY: number[];
-  toX: number[];
-  toY: number[];
-  angles: number[];
-  outgoing: Map<number, number[]>;
-}
-
-const TAU = Math.PI * 2;
-
-function normalizeAngle(angle: number): number {
-  let value = angle % TAU;
-  if (value < 0) value += TAU;
-  return value;
-}
-
-function vertexKey(x: number, y: number, stride: number): number {
-  return y * stride + x;
-}
-
-function removeCollinear(points: Point[]): Point[] {
-  if (points.length < 4) return points;
-  const result: Point[] = [];
-  for (const point of points) {
-    const last = result[result.length - 1];
-    if (last && last.x === point.x && last.y === point.y) continue;
-    result.push(point);
-  }
-  if (result.length < 4) return result;
-  let changed = true;
-  while (changed && result.length > 3) {
-    changed = false;
-    for (let index = 0; index < result.length; index++) {
-      const previous = result[(index - 1 + result.length) % result.length];
-      const current = result[index];
-      const next = result[(index + 1) % result.length];
-      const cross = (current.x - previous.x) * (next.y - current.y) - (current.y - previous.y) * (next.x - current.x);
-      if (Math.abs(cross) < 1e-9) {
-        result.splice(index, 1);
-        changed = true;
-        break;
-      }
-    }
-  }
-  return result;
-}
-
 /**
  * A pixel-boundary loop may touch itself at a grid vertex (two arms of the same
  * 4-connected region meeting at a corner). Such a ring is not simple and cannot
  * be exported as a GeoJSON ring. Walk the loop and cut every repeated vertex
  * into its own closed ring: the union of the pieces is identical to the original
  * area, and each piece is a simple ring by construction.
+ *
+ * Works on positional indices so the hot extraction path never builds millions
+ * of coordinate strings; the exported wrapper maps them back to points.
  */
-export function splitAtRepeatedVertices(points: Point[]): Point[][] {
-  const loops: Point[][] = [];
-  let path: Point[] = [];
-  const seen = new Map<string, number>();
+function repeatedLoops<K>(keys: K[]): number[][] {
+  const loops: number[][] = [];
+  const path: number[] = [];
+  const seen = new Map<K, number>();
 
-  for (const point of points) {
-    const key = `${point.x},${point.y}`;
+  for (let index = 0; index < keys.length; index++) {
+    const key = keys[index];
     const previous = seen.get(key);
     if (previous === undefined) {
       seen.set(key, path.length);
-      path.push(point);
+      path.push(index);
       continue;
     }
     const loop = path.slice(previous);
     if (loop.length >= 3) loops.push(loop);
-    // Keep the repeated vertex as the continuation point, drop only the loop.
-    path = path.slice(0, previous + 1);
-    seen.clear();
-    path.forEach((item, index) => seen.set(`${item.x},${item.y}`, index));
+    // Truncate to the first occurrence. Only the tail disappears, so the
+    // positions of the surviving prefix remain valid; drop their map entries
+    // instead of rebuilding the whole index (the old code rescanned the path on
+    // every cut, which was quadratic on self-touching rings).
+    for (let position = path.length - 1; position > previous; position--) {
+      seen.delete(keys[path[position]]);
+    }
+    path.length = previous + 1;
   }
   if (path.length >= 3) loops.push(path);
   return loops;
+}
+
+export function splitAtRepeatedVertices(points: Point[]): Point[][] {
+  const keys = points.map((point) => `${point.x},${point.y}`);
+  return repeatedLoops(keys).map((loop) => loop.map((index) => points[index]));
 }
 
 export function signedArea(points: Point[]): number {
@@ -96,34 +60,91 @@ export function signedArea(points: Point[]): number {
 }
 
 /**
+ * Removes collinear vertices from a closed ring in linear time.
+ *
+ * The previous implementation restarted the scan from index 0 after every
+ * removal, which is O(n²) on long pixel staircases — the dominant cost on large
+ * orthophotos. A circular doubly-linked list plus a work queue visits each
+ * vertex a constant number of times.
+ */
+function removeCollinear(points: Point[]): Point[] {
+  const count = points.length;
+  if (count < 4) return points;
+  const alive = new Uint8Array(count).fill(1);
+  const previous = new Int32Array(count);
+  const next = new Int32Array(count);
+  for (let index = 0; index < count; index++) {
+    previous[index] = (index - 1 + count) % count;
+    next[index] = (index + 1) % count;
+  }
+
+  const queue = new Int32Array(count * 4);
+  let head = 0;
+  let tail = 0;
+  for (let index = 0; index < count; index++) queue[tail++] = index;
+
+  let remaining = count;
+  while (head < tail) {
+    const index = queue[head++];
+    if (!alive[index] || remaining <= 3) continue;
+    const before = previous[index];
+    const after = next[index];
+    const a = points[before];
+    const b = points[index];
+    const c = points[after];
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (Math.abs(cross) >= 1e-9) continue;
+    alive[index] = 0;
+    remaining--;
+    next[before] = after;
+    previous[after] = before;
+    queue[tail++] = before;
+    queue[tail++] = after;
+  }
+
+  const result: Point[] = [];
+  for (let index = 0; index < count; index++) {
+    if (alive[index]) result.push(points[index]);
+  }
+  return result;
+}
+
+/**
  * Traces the boundary of a binary mask along pixel edges and follows the planar
  * face graph. Every ring is closed by construction; directed edges carry the
  * filled region on their left, and at a pinch vertex the next edge is the first
  * one counter-clockwise from the twin, which keeps diagonally touching pixels
  * in separate rings. No marching-squares saddle heuristic is involved.
+ *
+ * Edges are stored flat and linked by vertex with an Int32 head table. The old
+ * Map<number, number[]> allocated one array per boundary vertex and called
+ * Math.atan2 for every edge; boundary directions are axis-aligned, so a modulo
+ * turn comparison is exact and much cheaper.
  */
 export function extractContours(mask: Uint8Array, width: number, height: number): ContourRing[] {
   const stride = width + 1;
-  const store: EdgeStore = {
-    fromX: [],
-    fromY: [],
-    toX: [],
-    toY: [],
-    angles: [],
-    outgoing: new Map(),
-  };
+  const vertexCount = stride * (height + 1);
+  const firstOut = new Int32Array(vertexCount).fill(-1);
+  const fromX: number[] = [];
+  const fromY: number[] = [];
+  const toX: number[] = [];
+  const toY: number[] = [];
+  const directions: number[] = [];
+  const nextOut: number[] = [];
 
   const addEdge = (x1: number, y1: number, x2: number, y2: number) => {
-    const index = store.fromX.length;
-    store.fromX.push(x1);
-    store.fromY.push(y1);
-    store.toX.push(x2);
-    store.toY.push(y2);
-    store.angles.push(normalizeAngle(Math.atan2(y2 - y1, x2 - x1)));
-    const key = vertexKey(x1, y1, stride);
-    const list = store.outgoing.get(key);
-    if (list) list.push(index);
-    else store.outgoing.set(key, [index]);
+    const edge = fromX.length;
+    fromX.push(x1);
+    fromY.push(y1);
+    toX.push(x2);
+    toY.push(y2);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    // 0 = +x, 1 = +y, 2 = -x, 3 = -y (screen coordinates, y downwards).
+    directions.push(dx === 1 ? 0 : dy === 1 ? 1 : dx === -1 ? 2 : 3);
+    const fromKey = y1 * stride + x1;
+    nextOut.push(firstOut[fromKey]);
+    firstOut[fromKey] = edge;
   };
 
   for (let y = 0; y < height; y++) {
@@ -138,51 +159,50 @@ export function extractContours(mask: Uint8Array, width: number, height: number)
     }
   }
 
-  const edgeCount = store.fromX.length;
+  const edgeCount = fromX.length;
   if (!edgeCount) return [];
   const used = new Uint8Array(edgeCount);
   const rings: ContourRing[] = [];
 
-  const keyOf = (x: number, y: number) => vertexKey(x, y, stride);
-
   for (let start = 0; start < edgeCount; start++) {
     if (used[start]) continue;
-    const points: Point[] = [];
+    const path: number[] = [];
     let current = start;
     let guard = 0;
     let closed = false;
 
     while (guard++ <= edgeCount + 1) {
       used[current] = 1;
-      points.push({ x: store.fromX[current], y: store.fromY[current] });
-      const endX = store.toX[current];
-      const endY = store.toY[current];
-      const candidates = store.outgoing.get(keyOf(endX, endY)) ?? [];
-      if (!candidates.length) break;
-
-      const reverse = normalizeAngle(store.angles[current] + Math.PI);
-      let next = -1;
-      let bestDelta = Infinity;
-      for (const candidate of candidates) {
-        let delta = normalizeAngle(store.angles[candidate] - reverse);
-        if (delta < 1e-7) delta += TAU;
-        if (delta < bestDelta) {
-          bestDelta = delta;
-          next = candidate;
+      path.push(fromY[current] * stride + fromX[current]);
+      const endKey = toY[current] * stride + toX[current];
+      const reverse = (directions[current] + 2) & 3;
+      let chosen = -1;
+      let bestTurn = 5;
+      for (let candidate = firstOut[endKey]; candidate !== -1; candidate = nextOut[candidate]) {
+        let turn = (directions[candidate] - reverse + 4) & 3;
+        // Reversing along the twin is the last resort, as before.
+        if (turn === 0) turn = 4;
+        if (turn < bestTurn || (turn === bestTurn && candidate < chosen)) {
+          bestTurn = turn;
+          chosen = candidate;
         }
       }
-      if (next < 0) break;
-      if (next === start) {
+      if (chosen < 0) break;
+      if (chosen === start) {
         closed = true;
         break;
       }
-      if (used[next]) break;
-      current = next;
+      if (used[chosen]) break;
+      current = chosen;
     }
 
     if (!closed) continue;
-    for (const loop of splitAtRepeatedVertices(points)) {
-      const clean = removeCollinear(loop);
+    for (const loop of repeatedLoops(path)) {
+      const points: Point[] = loop.map((index) => {
+        const key = path[index];
+        return { x: key % stride, y: (key / stride) | 0 };
+      });
+      const clean = removeCollinear(points);
       if (clean.length < 3) continue;
       const area = signedArea(clean);
       if (Math.abs(area) < 0.5) continue;

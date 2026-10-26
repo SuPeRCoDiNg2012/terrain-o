@@ -5,6 +5,7 @@ import { computeFeatures } from './features';
 import { slic } from './slic';
 import { classifySignature, CLASS_DEFINITIONS, type ClassIndex } from './rules';
 import { fillEnclosedHoles, labelAgreement, majorityFilter, removeSmallComponents } from './morphology';
+import type { ClassPriorMap } from './types';
 
 export {
   CLASS_ART,
@@ -117,6 +118,7 @@ export function classifyPixels(
   params: ClassificationParams,
   onProgress?: ProgressFn,
   signal?: AbortSignal,
+  prior?: ClassPriorMap | null,
 ): ClassificationResult {
   const settings = normalize(params);
   const checkAbort = () => {
@@ -168,6 +170,37 @@ export function classifyPixels(
     }
   }
 
+  // Aggregate the external prior per superpixel. A prior covering only a tiny
+  // fraction of a segment must not steer the whole segment.
+  const priorClass = new Uint8Array(count);
+  const priorCoverage = new Float32Array(count);
+  if (prior && prior.width === w && prior.height === h) {
+    const priorSums = new Float32Array(count * 5);
+    for (let pixel = 0; pixel < w * h; pixel++) {
+      const strength = prior.strength[pixel];
+      if (strength <= 0) continue;
+      const label = segments.labels[pixel];
+      if (label < 0 || label >= count) continue;
+      priorSums[label * 5 + prior.classes[pixel]] += strength;
+    }
+    for (let label = 0; label < count; label++) {
+      let bestClass = 0;
+      let bestSum = 0;
+      const base = label * 5;
+      for (let classId = 1; classId < 5; classId++) {
+        const sum = priorSums[base + classId];
+        if (sum > bestSum) {
+          bestSum = sum;
+          bestClass = classId;
+        }
+      }
+      if (bestSum > 0) {
+        priorClass[label] = bestClass;
+        priorCoverage[label] = pixelCount[label] ? bestSum / pixelCount[label] : 0;
+      }
+    }
+  }
+
   const segmentClass = new Uint8Array(count);
   const segmentConfidence = new Float32Array(count);
   for (let label = 0; label < count; label++) {
@@ -194,6 +227,9 @@ export function classifyPixels(
         edgeDensity: sums[base + 5] / size,
       },
       settings,
+      priorCoverage[label] > 0.02
+        ? { classId: priorClass[label] as ClassIndex, coverage: Math.min(1, priorCoverage[label]) }
+        : null,
     );
     segmentClass[label] = decision.classId;
     segmentConfidence[label] = decision.confidence;
@@ -215,37 +251,52 @@ export function classifyPixels(
   onProgress?.(88, 'Confidenza e overlay');
   const agreement = labelAgreement(cleaned, w, h);
   const confidence = new Float32Array(w * h);
-  for (let pixel = 0; pixel < confidence.length; pixel++) {
+  const stats: ClassificationStats = { unc: 0, veg: 0, open: 0, water: 0, art: 0 };
+  const keys: Array<keyof ClassificationStats> = ['unc', 'veg', 'open', 'water', 'art'];
+  const counts = new Uint32Array(5);
+  const overlay = new Uint8ClampedArray(w * h * 4);
+
+  // Colour table flattened once: the old loop resolved an object property for
+  // every one of the four million pixels.
+  const reds = new Uint8Array(5);
+  const greens = new Uint8Array(5);
+  const blues = new Uint8Array(5);
+  const alphas = new Uint8Array(5);
+  for (let classId = 0; classId < 5; classId++) {
+    const definition = CLASS_DEFINITIONS[classId as ClassIndex] ?? CLASS_DEFINITIONS[0];
+    reds[classId] = definition.rgba[0];
+    greens[classId] = definition.rgba[1];
+    blues[classId] = definition.rgba[2];
+    alphas[classId] = definition.rgba[3];
+  }
+
+  // Confidence, statistics and the overlay share one pass over the image.
+  const illuminatedConfidence = illuminated.confidence;
+  for (let pixel = 0; pixel < cleaned.length; pixel++) {
+    const classId = cleaned[pixel] as ClassIndex;
+    counts[classId]++;
+    const offset = pixel * 4;
+    overlay[offset] = reds[classId];
+    overlay[offset + 1] = greens[classId];
+    overlay[offset + 2] = blues[classId];
+    overlay[offset + 3] = alphas[classId];
+
     const label = segments.labels[pixel];
     const valid = label >= 0 && label < count;
     const baseConfidence = valid ? segmentConfidence[label] : 0.2;
     const segmentLabel = valid ? segmentClass[label] : 0;
     // If the morphological pass rewrote this pixel, the final label was not the
     // classifier's own choice: report it with reduced confidence.
-    const rewritten = cleaned[pixel] !== segmentLabel ? 0.78 : 1;
+    const rewritten = classId !== segmentLabel ? 0.78 : 1;
     // Local label agreement and illumination quality both inform certainty.
     confidence[pixel] = clamp01(
       baseConfidence *
         rewritten *
         (0.78 + 0.22 * agreement[pixel]) *
-        (0.85 + 0.15 * illuminated.confidence[pixel]),
+        (0.85 + 0.15 * illuminatedConfidence[pixel]),
     );
   }
 
-  const stats: ClassificationStats = { unc: 0, veg: 0, open: 0, water: 0, art: 0 };
-  const keys: Array<keyof ClassificationStats> = ['unc', 'veg', 'open', 'water', 'art'];
-  const counts = new Uint32Array(5);
-  const overlay = new Uint8ClampedArray(w * h * 4);
-  for (let pixel = 0; pixel < cleaned.length; pixel++) {
-    const classId = cleaned[pixel] as ClassIndex;
-    counts[classId]++;
-    const definition = CLASS_DEFINITIONS[classId] ?? CLASS_DEFINITIONS[0];
-    const offset = pixel * 4;
-    overlay[offset] = definition.rgba[0];
-    overlay[offset + 1] = definition.rgba[1];
-    overlay[offset + 2] = definition.rgba[2];
-    overlay[offset + 3] = definition.rgba[3];
-  }
   keys.forEach((key, index) => {
     stats[key] = Math.round((counts[index] / cleaned.length) * 1000) / 10;
   });

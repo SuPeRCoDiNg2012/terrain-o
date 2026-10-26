@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal } from './Modal';
+import { useT } from '../../i18n';
 import { Icon, type IconName } from './Icon';
 
 const STEPS: Array<{ icon: IconName; kicker: string; title: string; body: string }> = [
@@ -37,6 +38,7 @@ export const ONBOARDING_KEY = 'terrain-o:onboarding-v1';
 
 export function Onboarding({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0);
+  const t = useT();
   const current = STEPS[step];
   const finish = () => {
     try {
@@ -48,25 +50,25 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
   };
   return (
     <Modal
-      title={current.title}
-      kicker={current.kicker}
+      title={t(current.title)}
+      kicker={t(current.kicker)}
       onClose={finish}
       wide
       footer={
         <div className="onboarding-footer">
-          <button type="button" className="btn btn-ghost" onClick={finish}>Salta</button>
+          <button type="button" className="btn btn-ghost" onClick={finish}>{t('Salta')}</button>
           <div className="onboarding-progress" aria-hidden="true">
             {STEPS.map((_, index) => <span key={index} className={index === step ? 'active' : ''} />)}
           </div>
           <div className="onboarding-actions">
-            {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => setStep(step - 1)}>Indietro</button>}
+            {step > 0 && <button type="button" className="btn btn-ghost" onClick={() => setStep(step - 1)}>{t('Indietro')}</button>}
             {step < STEPS.length - 1 ? (
               <button type="button" className="btn btn-primary" onClick={() => setStep(step + 1)} data-autofocus>
-                Avanti <Icon name="right" size={16} />
+                {t('Avanti')} <Icon name="right" size={16} />
               </button>
             ) : (
               <button type="button" className="btn btn-primary" onClick={finish} data-autofocus>
-                Inizia a lavorare
+                {t('Inizia a lavorare')}
               </button>
             )}
           </div>
@@ -75,11 +77,10 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
     >
       <div className="onboarding-hero">
         <div className="onboarding-icon"><Icon name={current.icon} size={30} /></div>
-        <p>{current.body}</p>
+        <p>{t(current.body)}</p>
       </div>
       <div className="onboarding-disclaimer">
-        <Icon name="shield" size={16} /> Terrain / O produce bozze preliminari. Non è uno strumento di validazione IOF,
-        non certifica la sicurezza del terreno e non sostituisce la verifica sul campo.
+        <Icon name="shield" size={16} /> {t('Terrain / O produce bozze preliminari. Non è uno strumento di validazione IOF, non certifica la sicurezza del terreno e non sostituisce la verifica sul campo.')}
       </div>
     </Modal>
   );

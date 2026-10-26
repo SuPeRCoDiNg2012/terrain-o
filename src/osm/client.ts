@@ -1,4 +1,4 @@
-import type { BBox, OsmWay, Project, WorldFile } from '../model/types';
+import type { BBox, OsmKind, OsmWay, Project, WorldFile } from '../model/types';
 import { wgs84ToPixel } from '../geo/projection';
 import { getOsmCache, putOsmCache } from '../persistence/db';
 
@@ -13,18 +13,30 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
 ] as const;
 const OSM_API_ENDPOINT = 'https://api.openstreetmap.org/api/0.6/map';
-const QUERY_VERSION = 'v4';
+const QUERY_VERSION = 'v5';
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const TILE_DEGREES = 0.05;
 const MAX_TILES = 25;
-const OVERPASS_TIMEOUT_MS = 6_000;
+const OVERPASS_TIMEOUT_MS = 9_000;
 const OSM_API_TIMEOUT_MS = 25_000;
+const MAX_TREES_PER_TILE = 2500;
+const MAX_TREES_TOTAL = 15000;
 
-interface OverpassElement {
+type LatLon = { lat: number; lon: number };
+
+export interface OverpassElement {
   type: string;
   id: number;
+  lat?: number;
+  lon?: number;
   tags?: Record<string, string>;
-  geometry?: Array<{ lat: number; lon: number }>;
+  geometry?: LatLon[];
+  members?: Array<{
+    type: string;
+    ref: number;
+    role?: string;
+    geometry?: LatLon[];
+  }>;
 }
 
 interface OverpassResponse {
@@ -32,13 +44,14 @@ interface OverpassResponse {
   remark?: string;
 }
 
-interface RawOsmWay {
+export interface RawOsmWay {
   id: number;
-  kind: 'highway' | 'waterway';
-  highway?: string;
-  waterway?: string;
+  kind: OsmKind;
+  tags: Record<string, string>;
   name?: string;
-  geometry: Array<{ lat: number; lon: number }>;
+  geometry: LatLon[];
+  holes?: LatLon[][];
+  closed?: boolean;
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -94,35 +107,193 @@ function splitBBox(bbox: BBox): BBox[] {
   return cells;
 }
 
+/**
+ * One request covers the physical and human-made layers the fusion needs:
+ * buildings, land cover, water, roads, paths, barriers and individual trees.
+ * Multipolygon relations are requested as well, because most large forests and
+ * many building courtyards are relations rather than single ways.
+ */
 export function buildOverpassQuery(bbox: BBox): string {
   const bounds = `${bbox.south.toFixed(6)},${bbox.west.toFixed(6)},${bbox.north.toFixed(6)},${bbox.east.toFixed(6)}`;
-  return `[out:json][timeout:60];(way["highway"](${bounds});way["waterway"](${bounds}););out body geom;`;
+  return `[out:json][timeout:60];
+(
+  way["highway"](${bounds});
+  way["waterway"](${bounds});
+  way["building"](${bounds});
+  way["landuse"](${bounds});
+  way["natural"](${bounds});
+  way["leisure"](${bounds});
+  way["amenity"](${bounds});
+  way["barrier"](${bounds});
+  way["railway"](${bounds});
+  relation["building"](${bounds});
+  relation["landuse"](${bounds});
+  relation["natural"](${bounds});
+  relation["leisure"](${bounds});
+  relation["amenity"](${bounds});
+  relation["railway"](${bounds});
+  relation["waterway"](${bounds});
+);
+out body geom;
+node["natural"="tree"](${bounds});
+out body ${MAX_TREES_PER_TILE};`;
 }
 
 export function buildOsmApiUrl(bbox: BBox): string {
   return `${OSM_API_ENDPOINT}?bbox=${bbox.west.toFixed(6)},${bbox.south.toFixed(6)},${bbox.east.toFixed(6)},${bbox.north.toFixed(6)}`;
 }
 
-function kindOf(tags: Record<string, string>): 'highway' | 'waterway' | null {
+function primaryKind(tags: Record<string, string>): OsmKind | null {
+  if (tags.building && tags.building !== 'no') return 'building';
   if (tags.highway) return 'highway';
   if (tags.waterway) return 'waterway';
+  if (tags.railway) return 'railway';
+  if (tags.barrier) return 'barrier';
+  if (tags.landuse) return 'landuse';
+  if (tags.natural) return tags.natural === 'tree' ? 'tree' : 'natural';
+  if (tags.leisure) return 'leisure';
+  if (tags.amenity) return 'amenity';
   return null;
 }
 
-function overpassToWays(elements: OverpassElement[]): RawOsmWay[] {
+function closedRing(geometry: LatLon[]): boolean {
+  if (geometry.length < 4) return false;
+  const first = geometry[0];
+  const last = geometry[geometry.length - 1];
+  return Math.abs(first.lat - last.lat) < 1e-9 && Math.abs(first.lon - last.lon) < 1e-9;
+}
+
+function samePoint(a: LatLon, b: LatLon): boolean {
+  return Math.abs(a.lat - b.lat) < 1e-9 && Math.abs(a.lon - b.lon) < 1e-9;
+}
+
+/**
+ * Multipolygon members are unordered way fragments; they must be chained into
+ * closed rings before they can become a polygon. The previous importer only
+ * kept ways, so every large forest or lake mapped as a relation was silently
+ * lost.
+ */
+function assembleRings(segments: LatLon[][]): LatLon[][] {
+  const pool = segments.filter((segment) => segment.length >= 2).map((segment) => segment.slice());
+  const rings: LatLon[][] = [];
+  while (pool.length) {
+    const first = pool.shift()!;
+    const ring = first.slice();
+    let guard = 0;
+    while (guard++ < 10000) {
+      const tail = ring[ring.length - 1];
+      if (ring.length >= 4 && samePoint(tail, ring[0])) break;
+      let found = -1;
+      let reverse = false;
+      for (let index = 0; index < pool.length; index++) {
+        const segment = pool[index];
+        if (samePoint(segment[0], tail)) {
+          found = index;
+          reverse = false;
+          break;
+        }
+        if (samePoint(segment[segment.length - 1], tail)) {
+          found = index;
+          reverse = true;
+          break;
+        }
+      }
+      if (found < 0) break;
+      const segment = pool.splice(found, 1)[0];
+      if (reverse) ring.push(...segment.slice(0, -1).reverse());
+      else ring.push(...segment.slice(1));
+    }
+    if (ring.length >= 4 && samePoint(ring[0], ring[ring.length - 1])) rings.push(ring);
+  }
+  return rings;
+}
+
+function pointInRingLatLon(point: LatLon, ring: LatLon[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    if (
+      a.lat > point.lat !== b.lat > point.lat &&
+      point.lon < ((b.lon - a.lon) * (point.lat - a.lat)) / (b.lat - a.lat || 1e-12) + a.lon
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function wayFromElement(element: OverpassElement, tags: Record<string, string>, kind: OsmKind): RawOsmWay | null {
+  const geometry = (element.geometry ?? []).filter(
+    (node) => Number.isFinite(node.lat) && Number.isFinite(node.lon),
+  );
+  if (geometry.length < 2) return null;
+  return {
+    id: element.id,
+    kind,
+    tags,
+    name: tags.name,
+    geometry,
+    closed: closedRing(geometry),
+  };
+}
+
+export function parseOverpassElements(elements: OverpassElement[]): RawOsmWay[] {
   const ways: RawOsmWay[] = [];
   for (const element of elements) {
-    if (element.type !== 'way' || !Array.isArray(element.geometry) || element.geometry.length < 2) continue;
     const tags = element.tags ?? {};
-    const kind = kindOf(tags);
-    if (!kind) continue;
-    ways.push({
-      id: element.id,
-      kind,
-      highway: tags.highway,
-      waterway: tags.waterway,
-      name: tags.name,
-      geometry: element.geometry.filter((node) => Number.isFinite(node.lat) && Number.isFinite(node.lon)),
+    if (element.type === 'node') {
+      const lat = element.lat;
+      const lon = element.lon;
+      if (tags.natural === 'tree' && typeof lat === 'number' && typeof lon === 'number') {
+        ways.push({
+          id: element.id,
+          kind: 'tree',
+          tags,
+          name: tags.name,
+          geometry: [{ lat, lon }],
+          closed: false,
+        });
+      }
+      continue;
+    }
+    if (element.type === 'way') {
+      const kind = primaryKind(tags);
+      if (!kind || kind === 'tree') continue;
+      const way = wayFromElement(element, tags, kind);
+      if (way) ways.push(way);
+      continue;
+    }
+    if (element.type !== 'relation' || !Array.isArray(element.members)) continue;
+    const kind = primaryKind(tags);
+    if (!kind || kind === 'tree') continue;
+    const outer: LatLon[][] = [];
+    const inner: LatLon[][] = [];
+    for (const member of element.members) {
+      if (member.type !== 'way' || !Array.isArray(member.geometry) || member.geometry.length < 2) continue;
+      const geometry = member.geometry.filter(
+        (node) => Number.isFinite(node.lat) && Number.isFinite(node.lon),
+      );
+      if (geometry.length < 2) continue;
+      if (member.role === 'inner') inner.push(geometry);
+      else outer.push(geometry);
+    }
+    const outerRings = assembleRings(outer);
+    if (!outerRings.length) continue;
+    const innerRings = assembleRings(inner);
+    outerRings.forEach((ring, index) => {
+      const holes = innerRings.filter((hole) => hole[0] && pointInRingLatLon(hole[0], ring));
+      ways.push({
+        // Relations have no way id: use a stable negative id so a re-import
+        // updates the same feature instead of duplicating it.
+        id: -(element.id * 1000 + index + 1),
+        kind,
+        tags,
+        name: tags.name,
+        geometry: ring,
+        holes: holes.length ? holes : undefined,
+        closed: true,
+      });
     });
   }
   return ways;
@@ -132,12 +303,24 @@ function overpassToWays(elements: OverpassElement[]): RawOsmWay[] {
 export function parseOsmApiXml(xml: string): RawOsmWay[] {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   if (doc.querySelector('parsererror')) throw new Error('Risposta XML OSM non valida.');
-  const nodes = new Map<string, { lat: number; lon: number }>();
+  const nodes = new Map<string, LatLon>();
+  const trees: RawOsmWay[] = [];
   for (const node of doc.getElementsByTagName('node')) {
     const id = node.getAttribute('id');
     const lat = Number(node.getAttribute('lat'));
     const lon = Number(node.getAttribute('lon'));
-    if (id && Number.isFinite(lat) && Number.isFinite(lon)) nodes.set(id, { lat, lon });
+    if (!id || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const point = { lat, lon };
+    nodes.set(id, point);
+    const tags: Record<string, string> = {};
+    for (const tag of Array.from(node.getElementsByTagName('tag'))) {
+      const key = tag.getAttribute('k');
+      const value = tag.getAttribute('v');
+      if (key && value != null) tags[key] = value;
+    }
+    if (tags.natural === 'tree') {
+      trees.push({ id: Number(id), kind: 'tree', tags, name: tags.name, geometry: [point], closed: false });
+    }
   }
   const ways: RawOsmWay[] = [];
   for (const way of doc.getElementsByTagName('way')) {
@@ -147,9 +330,9 @@ export function parseOsmApiXml(xml: string): RawOsmWay[] {
       const value = tag.getAttribute('v');
       if (key && value != null) tags[key] = value;
     }
-    const kind = kindOf(tags);
-    if (!kind) continue;
-    const geometry: Array<{ lat: number; lon: number }> = [];
+    const kind = primaryKind(tags);
+    if (!kind || kind === 'tree') continue;
+    const geometry: LatLon[] = [];
     for (const nd of Array.from(way.getElementsByTagName('nd'))) {
       const node = nodes.get(nd.getAttribute('ref') ?? '');
       if (node) geometry.push(node);
@@ -158,13 +341,13 @@ export function parseOsmApiXml(xml: string): RawOsmWay[] {
     ways.push({
       id: Number(way.getAttribute('id')),
       kind,
-      highway: tags.highway,
-      waterway: tags.waterway,
+      tags,
       name: tags.name,
       geometry,
+      closed: closedRing(geometry),
     });
   }
-  return ways;
+  return [...ways, ...trees];
 }
 
 interface AttemptOptions {
@@ -224,7 +407,7 @@ async function fetchFromOverpass(url: string, query: string, options: AttemptOpt
     }
     const json = (await response.json()) as OverpassResponse;
     if (json.remark) throw retryableError(`Overpass: ${json.remark}`);
-    return overpassToWays(Array.isArray(json.elements) ? json.elements : []);
+    return parseOverpassElements(Array.isArray(json.elements) ? json.elements : []);
   });
 }
 
@@ -268,7 +451,7 @@ async function requestWays(
     try {
       const ways = await source.load();
       if (ways.length === 0 && index < sources.length - 1) {
-        errors.push(`${source.label}: nessun tracciato restituito`);
+        errors.push(`${source.label}: nessun dato restituito`);
         continue;
       }
       return { ways, source: source.label };
@@ -285,20 +468,54 @@ async function requestWays(
   );
 }
 
+function limitTrees(ways: OsmWay[]): OsmWay[] {
+  let trees = 0;
+  const limited: OsmWay[] = [];
+  for (const way of ways) {
+    if (way.kind === 'tree') {
+      if (trees >= MAX_TREES_TOTAL) continue;
+      trees++;
+    }
+    limited.push(way);
+  }
+  return limited;
+}
+
 function waysToPixelWays(rawWays: RawOsmWay[], project: Project): OsmWay[] {
   const ways: OsmWay[] = [];
   for (const way of rawWays) {
     const coords = way.geometry
       .map((node) => wgs84ToPixel(project, node.lon, node.lat))
       .filter((p): p is { x: number; y: number } => p != null && Number.isFinite(p.x) && Number.isFinite(p.y));
-    if (coords.length < 2) continue;
+    if (way.kind === 'tree' ? coords.length < 1 : coords.length < 2) continue;
+    let holes: OsmWay['holes'];
+    if (way.holes?.length) {
+      const converted = way.holes
+        .map((ring) =>
+          ring
+            .map((node) => wgs84ToPixel(project, node.lon, node.lat))
+            .filter((p): p is { x: number; y: number } => p != null && Number.isFinite(p.x) && Number.isFinite(p.y)),
+        )
+        .filter((ring) => ring.length >= 3);
+      if (converted.length) holes = converted;
+    }
     ways.push({
       id: way.id,
       kind: way.kind,
-      highway: way.highway,
-      waterway: way.waterway,
+      highway: way.tags.highway,
+      waterway: way.tags.waterway,
+      building: way.tags.building,
+      landuse: way.tags.landuse,
+      natural: way.tags.natural,
+      leisure: way.tags.leisure,
+      amenity: way.tags.amenity,
+      barrier: way.tags.barrier,
+      railway: way.tags.railway,
+      tags: way.tags,
       name: way.name,
       coords,
+      closed: way.closed,
+      holes,
     });
   }
   return ways;
@@ -329,7 +546,7 @@ export async function fetchOsmWays(
       const age = Date.now() - new Date(cached.at).getTime();
       if (age >= 0 && age < CACHE_MAX_AGE_MS) {
         callbacks.onProgress?.(100, 'Dati OSM dalla cache locale');
-        return { ways: cached.ways, fromCache: true, source: 'cache locale', cacheKey: key, fetchedAt: cached.at };
+        return { ways: limitTrees(cached.ways), fromCache: true, source: 'cache locale', cacheKey: key, fetchedAt: cached.at };
       }
     }
   }
@@ -349,10 +566,10 @@ export async function fetchOsmWays(
     done++;
     callbacks.onProgress?.(Math.round((done / cells.length) * 95), `Riquadri completati ${done}/${cells.length}`);
   }
-  const ways = [...byId.values()];
+  const ways = limitTrees([...byId.values()]);
   const at = new Date().toISOString();
   await putOsmCache({ key, at, ways });
-  callbacks.onProgress?.(100, `OSM: ${ways.length} tracciati`);
+  callbacks.onProgress?.(100, `OSM: ${ways.length} elementi`);
   return {
     ways,
     fromCache: false,

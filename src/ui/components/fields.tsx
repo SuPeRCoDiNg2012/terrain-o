@@ -64,15 +64,25 @@ export function Toggle({
   checked,
   onChange,
   description,
+  disabled,
+  testId,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   description?: string;
+  disabled?: boolean;
+  testId?: string;
 }) {
   return (
-    <label className="switch-row">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    <label className={`switch-row${disabled ? ' is-disabled' : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        data-testid={testId}
+      />
       <span className="switch-track" aria-hidden="true"><span className="switch-thumb" /></span>
       <span className="switch-copy">
         <span>{label}</span>

@@ -1,6 +1,7 @@
 import { useProjectStore } from '../../store/projectStore';
 import { useUiStore } from '../uiStore';
 import { useLayoutStore, type RulerUnit } from './layoutStore';
+import { useT } from '../../i18n';
 import { Icon } from '../components/Icon';
 
 const TOOL_NAMES: Record<string, string> = {
@@ -33,6 +34,7 @@ export function OptionsBar() {
   const offsetSelectedLines = useProjectStore((state) => state.offsetSelectedLines);
   const sampled = useUiStore((state) => state.sampledColor);
   const layout = useLayoutStore();
+  const t = useT();
 
   const isSelection = activeTool === 'select' || activeTool === 'marquee' || activeTool === 'lasso';
 
@@ -44,21 +46,21 @@ export function OptionsBar() {
   };
 
   return (
-    <div className="options-bar" role="toolbar" aria-label={`Opzioni ${TOOL_NAMES[activeTool] ?? activeTool}`}>
+    <div className="options-bar" role="toolbar" aria-label={t('Opzioni {tool}', { tool: t(TOOL_NAMES[activeTool] ?? activeTool) })}>
       <div className="options-tool-name">
-        <strong>{TOOL_NAMES[activeTool] ?? activeTool}</strong>
+        <strong>{t(TOOL_NAMES[activeTool] ?? activeTool)}</strong>
         <span className="options-hint">
-          {activeTool === 'select' && 'clic seleziona, trascina sposta, shift aggiunge'}
-          {activeTool === 'marquee' && 'trascina per selezionare un rettangolo'}
-          {activeTool === 'lasso' && (layout.lassoPolygon ? 'clic per i vertici, Invio chiude' : 'trascina un contorno libero')}
-          {activeTool === 'pan' && 'trascina la vista, spazio temporaneo'}
-          {activeTool === 'zoom' && 'clic ingrandisce, Alt+clic riduce'}
-          {activeTool === 'eyedropper' && 'clic campiona il colore della mappa'}
-          {activeTool === 'draw-area' && 'clic i vertici, Invio o doppio clic chiude'}
-          {activeTool === 'draw-line' && 'clic i vertici, Invio termina'}
-          {activeTool === 'draw-point' && 'clic per aggiungere un controllo'}
-          {activeTool === 'calibrate' && 'due punti e una distanza nota'}
-          {activeTool === 'text' && 'non disponibile in questa build'}
+          {activeTool === 'select' && t('clic seleziona, trascina sposta, shift aggiunge')}
+          {activeTool === 'marquee' && t('trascina per selezionare un rettangolo')}
+          {activeTool === 'lasso' && t(layout.lassoPolygon ? 'clic per i vertici, Invio chiude' : 'trascina un contorno libero')}
+          {activeTool === 'pan' && t('trascina la vista, spazio temporaneo')}
+          {activeTool === 'zoom' && t('clic ingrandisce, Alt+clic riduce')}
+          {activeTool === 'eyedropper' && t('clic campiona il colore della mappa')}
+          {activeTool === 'draw-area' && t('clic i vertici, Invio o doppio clic chiude')}
+          {activeTool === 'draw-line' && t('clic i vertici, Invio termina')}
+          {activeTool === 'draw-point' && t('clic per aggiungere un controllo')}
+          {activeTool === 'calibrate' && t('due punti e una distanza nota')}
+          {activeTool === 'text' && t('non disponibile in questa build')}
         </span>
       </div>
 
@@ -69,30 +71,33 @@ export function OptionsBar() {
         className={`options-toggle ${snapEnabled ? 'on' : ''}`}
         aria-pressed={snapEnabled}
         onClick={() => setSnapEnabled(!snapEnabled)}
-        title="Aggancia ai vertici esistenti"
+        title={t('Aggancia ai vertici esistenti')}
       >
-        <Icon name="point" size={14} /> Snap
+        <Icon name="point" size={14} /> {t('Aggancia')}
       </button>
       <button
         type="button"
         className={`options-toggle ${gridEnabled ? 'on' : ''}`}
         aria-pressed={gridEnabled}
         onClick={() => setGridEnabled(!gridEnabled)}
-        title="Mostra e aggancia la griglia"
+        title={t('Mostra e aggancia la griglia')}
       >
-        <Icon name="grid" size={14} /> Griglia
+        <Icon name="grid" size={14} /> {t('Griglia')}
       </button>
       {gridEnabled && (
         <label className="options-field">
-          <span>Passo</span>
+          <span>{t('Passo')}</span>
           <input
             type="number"
             min={2}
             max={500}
             step={1}
             value={gridSize}
-            onChange={(event) => setGridSize(Number(event.target.value))}
-            aria-label="Passo griglia in pixel"
+            onChange={(event) => {
+              const next = event.target.valueAsNumber;
+              if (Number.isFinite(next)) setGridSize(next);
+            }}
+            aria-label={t('Passo griglia in pixel')}
           />
           <span className="options-unit">px</span>
         </label>
@@ -100,7 +105,7 @@ export function OptionsBar() {
 
       {isSelection && (
         <label className="options-field options-tolerance">
-          <span>Tolleranza</span>
+          <span>{t('Tolleranza')}</span>
           <input
             type="range"
             min={1}
@@ -108,7 +113,7 @@ export function OptionsBar() {
             step={1}
             value={layout.selectionTolerance}
             onChange={(event) => layout.setSelectionTolerance(Number(event.target.value))}
-            aria-label="Tolleranza di selezione"
+            aria-label={t('Tolleranza di selezione')}
           />
           <span className="options-unit mono">{layout.selectionTolerance} px</span>
         </label>
@@ -120,15 +125,15 @@ export function OptionsBar() {
           className={`options-toggle ${layout.lassoPolygon ? 'on' : ''}`}
           aria-pressed={layout.lassoPolygon}
           onClick={() => layout.setLassoPolygon(!layout.lassoPolygon)}
-          title="Lazo poligonale: clicca i vertici e premi Invio"
+          title={t('Lazo poligonale: clicca i vertici e premi Invio')}
         >
-          Poligonale
+          {t('Poligonale')}
         </button>
       )}
 
       {activeTool === 'draw-line' && (
         <div className="options-field">
-          <span>Offset linea</span>
+          <span>{t('Offset linea')}</span>
           <input
             type="number"
             min={0.5}
@@ -136,16 +141,16 @@ export function OptionsBar() {
             step={0.5}
             value={layout.lineOffset}
             onChange={(event) => layout.setLineOffset(Number(event.target.value))}
-            aria-label="Offset linea in pixel"
+            aria-label={t('Offset linea in pixel')}
           />
           <button
             type="button"
             className="options-toggle"
             disabled={!selection.length}
             onClick={() => offsetSelectedLines(layout.lineOffset)}
-            title="Sposta le linee selezionate parallelamente alla geometria"
+            title={t('Sposta le linee selezionate parallelamente alla geometria')}
           >
-            Applica
+            {t('Applica')}
           </button>
         </div>
       )}
@@ -153,7 +158,7 @@ export function OptionsBar() {
       {activeTool === 'eyedropper' && (
         <div className="options-color">
           <span className="options-color-swatch" style={{ background: sampled?.hex ?? 'transparent' }} aria-hidden="true" />
-          <span className="mono">{sampled ? sampled.hex : 'nessun campione'}</span>
+          <span className="mono">{sampled ? sampled.hex : t('nessun campione')}</span>
           {sampled && <span className="mono muted">{sampled.r}, {sampled.g}, {sampled.b}</span>}
           {sampled?.classification && (
             <span className="options-color-class">
@@ -167,27 +172,27 @@ export function OptionsBar() {
       <div className="options-spacer" />
 
       <label className="options-field options-rulers">
-        <span>Unità righelli</span>
+        <span>{t('Unità righelli')}</span>
         <select
           value={layout.rulerUnit}
           onChange={(event) => layout.setRulerUnit(event.target.value as RulerUnit)}
-          aria-label="Unità dei righelli"
+          aria-label={t('Unità dei righelli')}
         >
-          <option value="px">pixel</option>
-          <option value="m">metri</option>
-          <option value="deg">gradi</option>
+          <option value="px">{t('pixel')}</option>
+          <option value="m">{t('metri')}</option>
+          <option value="deg">{t('gradi')}</option>
         </select>
       </label>
 
       <div className="options-zoom">
-        <button type="button" className="options-icon" onClick={() => zoomBy(1 / 1.25)} aria-label="Riduci zoom" title="Riduci (Ctrl+-)">
+        <button type="button" className="options-icon" onClick={() => zoomBy(1 / 1.25)} aria-label={t('Riduci zoom')} title={t('Riduci (Ctrl+-)')}>
           <Icon name="minus" size={14} />
         </button>
         <span className="mono options-zoom-value">{Math.round(view.scale * 100)}%</span>
-        <button type="button" className="options-icon" onClick={() => zoomBy(1.25)} aria-label="Aumenta zoom" title="Ingrandisci (Ctrl+=)">
+        <button type="button" className="options-icon" onClick={() => zoomBy(1.25)} aria-label={t('Aumenta zoom')} title={t('Ingrandisci (Ctrl+=)')}>
           <Icon name="plus" size={14} />
         </button>
-        <button type="button" className="options-icon" onClick={fitImage} title="Adatta alla vista (Ctrl+0)" aria-label="Adatta alla vista">
+        <button type="button" className="options-icon" onClick={fitImage} title={t('Adatta alla vista (Ctrl+0)')} aria-label={t('Adatta alla vista')}>
           <Icon name="fit" size={14} />
         </button>
       </div>

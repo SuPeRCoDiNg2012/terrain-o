@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
@@ -48,13 +48,25 @@ function ExportButton({
   );
 }
 
-export function ExportModal({ onClose }: { onClose: () => void }) {
+export function ExportModal({ onClose, initialFocus }: { onClose: () => void; initialFocus?: string }) {
   const project = useProjectStore((state) => state.project);
   const sourceImage = useProjectStore((state) => state.sourceImage);
   const classificationImage = useProjectStore((state) => state.classificationImage);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+
+  // Choosing "SVG…" or "PNG…" in the Exporta menu must land on that export,
+  // not at the top of a generic dialog: otherwise the menu looks dead.
+  useEffect(() => {
+    if (!initialFocus) return;
+    const target = document.querySelector<HTMLElement>(`[data-testid="${initialFocus}"]`);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center' });
+    target.classList.add('export-option-focus');
+    const timer = window.setTimeout(() => target.classList.remove('export-option-focus'), 2200);
+    return () => window.clearTimeout(timer);
+  }, [initialFocus]);
 
   const images: RenderImages = { source: sourceImage, classification: classificationImage };
   const hasImage = Boolean(project.image && sourceImage);

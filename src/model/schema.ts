@@ -48,8 +48,10 @@ const featureSchema = z.object({
   holes: z.array(z.array(pointSchema).min(3)).optional(),
   order: z.number().int().optional(),
   code: z.string().optional(),
-  source: z.enum(['manual', 'osm', 'vector', 'gpx', 'dem']).optional(),
+  source: z.enum(['manual', 'osm', 'vector', 'gpx', 'dem', 'ml']).optional(),
   osmId: z.number().optional(),
+  mlConfidence: z.number().min(0).max(1).optional(),
+  mergedFrom: z.array(z.string().min(1)).optional(),
 });
 
 const imageSchema = z.object({
@@ -100,6 +102,39 @@ const classificationParamsSchema = z.object({
   vegAMax: z.number().min(-60).max(20).optional(),
   openBMin: z.number().min(0).max(80).optional(),
   artChromaMax: z.number().min(0).max(40).optional(),
+  osmPriorEnabled: z.boolean().optional(),
+  osmPriorWeight: z.number().min(0).max(1).optional(),
+});
+
+const classPercentSchema = z.object({
+  veg: z.number().min(0).max(100),
+  open: z.number().min(0).max(100),
+  water: z.number().min(0).max(100),
+  art: z.number().min(0).max(100),
+});
+
+const classCountSchema = z.object({
+  veg: z.number().int().nonnegative(),
+  open: z.number().int().nonnegative(),
+  water: z.number().int().nonnegative(),
+  art: z.number().int().nonnegative(),
+});
+
+const classificationOsmAgreementSchema = z.object({
+  overall: z.number().min(0).max(100),
+  covered: z.number().min(0).max(100),
+  priorPixels: z.number().int().nonnegative(),
+  byClass: classPercentSchema,
+  classPixels: classCountSchema,
+});
+
+const classificationOsmContrastSchema = z.object({
+  osmId: z.number(),
+  name: z.string(),
+  label: z.string(),
+  classKey: z.enum(['veg', 'open', 'water', 'art']),
+  agreement: z.number().min(0).max(100),
+  areaPx: z.number().int().nonnegative(),
 });
 
 const classificationSchema = z.object({
@@ -110,6 +145,8 @@ const classificationSchema = z.object({
   createdAt: z.string().min(1),
   stats: classificationStatsSchema,
   params: classificationParamsSchema,
+  osmAgreement: classificationOsmAgreementSchema.optional(),
+  osmContrasts: z.array(classificationOsmContrastSchema).optional(),
 });
 
 const calibrationSampleSchema = z.object({
@@ -129,11 +166,44 @@ const calibrationSchema = z.object({
 
 const osmWaySchema = z.object({
   id: z.number(),
-  kind: z.enum(['highway', 'waterway']),
+  kind: z.enum(['highway', 'waterway', 'building', 'landuse', 'natural', 'leisure', 'amenity', 'barrier', 'railway', 'tree']),
   highway: z.string().optional(),
   waterway: z.string().optional(),
+  building: z.string().optional(),
+  landuse: z.string().optional(),
+  natural: z.string().optional(),
+  leisure: z.string().optional(),
+  amenity: z.string().optional(),
+  barrier: z.string().optional(),
+  railway: z.string().optional(),
+  tags: z.record(z.string(), z.string()).optional(),
   name: z.string().optional(),
-  coords: z.array(pointSchema).min(2),
+  coords: z.array(pointSchema).min(1),
+  closed: z.boolean().optional(),
+  holes: z.array(z.array(pointSchema).min(3)).optional(),
+});
+
+const aiRecognitionSchema = z.object({
+  createdAt: z.string().min(1),
+  samples: z.number().int().nonnegative(),
+  labelledSamples: z.number().int().nonnegative(),
+  validation: z.number().min(0).max(100),
+  classes: z.number().int().nonnegative(),
+  polygons: z.number().int().nonnegative(),
+  buildings: z.number().int().nonnegative(),
+  trees: z.number().int().nonnegative(),
+  method: z.string().min(1),
+  featureImportance: z.array(z.object({ name: z.string(), value: z.number().min(0).max(1) })),
+});
+
+const symbolFusionSchema = z.object({
+  createdAt: z.string().min(1),
+  before: z.number().int().nonnegative(),
+  after: z.number().int().nonnegative(),
+  removed: z.number().int().nonnegative(),
+  mergedGroups: z.number().int().nonnegative(),
+  protectedConflicts: z.number().int().nonnegative(),
+  byType: z.record(z.string(), z.number().int().nonnegative()),
 });
 
 const contourSchema = z.object({
@@ -174,6 +244,8 @@ const projectSchema = z.object({
   contourInterval: z.number().positive(),
   course: z.object({ showLines: z.boolean() }),
   geoWarnings: z.array(z.string()),
+  ai: aiRecognitionSchema.optional(),
+  symbolFusion: symbolFusionSchema.optional(),
 });
 
 const assetFileSchema = z.object({
@@ -308,6 +380,8 @@ export function normalizeProjectInput(input: unknown): {
       code: feature.code,
       source: feature.source || 'manual',
       osmId: feature.osmId,
+      mlConfidence: typeof feature.mlConfidence === 'number' ? feature.mlConfidence : undefined,
+      mergedFrom: Array.isArray(feature.mergedFrom) ? feature.mergedFrom : undefined,
     }));
   }
 

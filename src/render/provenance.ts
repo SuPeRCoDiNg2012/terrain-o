@@ -25,7 +25,14 @@ export function featureProvenance(feature: Pick<Feature, 'verified' | 'source'>)
   if (feature.verified) return 'verified';
   // Classification, OSM and DEM are all automatic interpretations. Only
   // geometry drawn or imported by the user is "manual".
-  if (feature.source === 'vector' || feature.source === 'osm' || feature.source === 'dem') return 'auto';
+  if (
+    feature.source === 'vector' ||
+    feature.source === 'osm' ||
+    feature.source === 'dem' ||
+    feature.source === 'ml'
+  ) {
+    return 'auto';
+  }
   return 'manual';
 }
 

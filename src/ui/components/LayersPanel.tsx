@@ -2,15 +2,23 @@ import { useState } from 'react';
 import type { LayerId } from '../../model/types';
 import { useProjectStore } from '../../store/projectStore';
 import { LAYER_DEFS } from '../../model/constants';
+import { translate, useLocale, useT } from '../../i18n';
 import { Icon } from './Icon';
 
-function layerCount(id: LayerId, project: ReturnType<typeof useProjectStore.getState>['project']): string {
-  if (id === 'source') return project.image ? '1 immagine' : 'nessuna';
-  if (id === 'classification') return project.classification ? `${project.classification.width}×${project.classification.height}` : 'assente';
-  if (id === 'contours') return `${project.contours.length} curve`;
-  if (id === 'osm') return `${project.osmWays.length} tracciati`;
-  if (id === 'features') return `${project.features.filter((f) => f.kind !== 'point').length} elementi`;
-  return `${project.features.filter((f) => f.kind === 'point' && ['start', 'control', 'finish'].includes(f.type)).length} punti`;
+function layerCount(id: LayerId, project: ReturnType<typeof useProjectStore.getState>['project'], locale: 'it' | 'en'): string {
+  const tr = (source: string, vars?: Record<string, string | number>) => translate(locale, source, vars);
+  if (id === 'source') return project.image ? tr('1 immagine') : tr('nessuna');
+  if (id === 'classification') return project.classification ? `${project.classification.width}×${project.classification.height}` : tr('assente');
+  if (id === 'contours') return tr('{n} curve', { n: project.contours.length });
+  if (id === 'osm') return tr('{n} elementi OSM', { n: project.osmWays.length });
+  if (id === 'features') {
+    return tr('{n} elementi', {
+      n: project.features.filter(
+        (f) => f.kind !== 'point' || !['start', 'control', 'finish'].includes(f.type),
+      ).length,
+    });
+  }
+  return tr('{n} punti', { n: project.features.filter((f) => f.kind === 'point' && ['start', 'control', 'finish'].includes(f.type)).length });
 }
 
 export function LayersPanel() {
@@ -20,6 +28,8 @@ export function LayersPanel() {
   const reorderLayer = useProjectStore((state) => state.reorderLayer);
   const [dragging, setDragging] = useState<LayerId | null>(null);
   const [dragOver, setDragOver] = useState<LayerId | null>(null);
+  const t = useT();
+  const locale = useLocale();
 
   const display = [...project.layerOrder].reverse();
   const handleDrop = (target: LayerId) => {
@@ -38,11 +48,11 @@ export function LayersPanel() {
   return (
     <section className="panel-section layers-panel" aria-labelledby="layers-heading">
       <div className="section-title">
-        <h3 id="layers-heading"><Icon name="layers" size={16} /> Livelli</h3>
-        <span className="tiny muted">trascina o usa le frecce</span>
+        <h3 id="layers-heading"><Icon name="layers" size={16} /> {t('Livelli')}</h3>
+        <span className="tiny muted">{t('trascina o usa le frecce')}</span>
       </div>
       <p className="tiny muted">
-        L'ordine è dal livello più alto al più basso. Ogni livello mantiene visibilità e opacità nel progetto.
+        {t("L'ordine è dal livello più alto al più basso. Ogni livello mantiene visibilità e opacità nel progetto.")}
       </p>
       <ul className="layer-list">
         {display.map((id, displayIndex) => {
@@ -70,7 +80,7 @@ export function LayersPanel() {
               }}
               onDragEnd={() => { setDragging(null); setDragOver(null); }}
             >
-              <span className="layer-grip" aria-hidden="true" title="Trascina per riordinare">
+              <span className="layer-grip" aria-hidden="true" title={t('Trascina per riordinare')}>
                 <Icon name="grip" size={15} />
               </span>
               <button
@@ -78,17 +88,17 @@ export function LayersPanel() {
                 className="icon-button layer-eye"
                 onClick={() => setLayerVisible(id, !layer.visible)}
                 aria-pressed={layer.visible}
-                aria-label={`${layer.visible ? 'Nascondi' : 'Mostra'} livello ${definition.label}`}
+                aria-label={t(layer.visible ? 'Nascondi livello {name}' : 'Mostra livello {name}', { name: t(definition.label) })}
               >
                 <Icon name={layer.visible ? 'eye' : 'eyeOff'} size={17} />
               </button>
               <div className="layer-copy">
                 <div className="layer-title-line">
-                  <strong>{definition.label}</strong>
+                  <strong>{t(definition.label)}</strong>
                 </div>
-                <span className="tiny muted">{layerCount(id, project)} · {definition.hint}</span>
+                <span className="tiny muted">{layerCount(id, project, locale)} · {t(definition.hint)}</span>
                 <div className="layer-opacity">
-                  <label htmlFor={`opacity-${id}`} className="sr-only">Opacità {definition.label}</label>
+                  <label htmlFor={`opacity-${id}`} className="sr-only">{t('Opacità {name}', { name: t(definition.label) })}</label>
                   <input
                     id={`opacity-${id}`}
                     type="range"
@@ -106,8 +116,8 @@ export function LayersPanel() {
                   className="icon-button"
                   onClick={() => reorderLayer(id, actualIndex + 1)}
                   disabled={actualIndex === project.layerOrder.length - 1}
-                  aria-label={`Porta ${definition.label} più in alto`}
-                  title="Sposta più in alto"
+                  aria-label={t('Porta {name} più in alto', { name: t(definition.label) })}
+                  title={t('Sposta più in alto')}
                 >
                   <Icon name="up" size={14} />
                 </button>
@@ -116,13 +126,13 @@ export function LayersPanel() {
                   className="icon-button"
                   onClick={() => reorderLayer(id, actualIndex - 1)}
                   disabled={actualIndex === 0}
-                  aria-label={`Porta ${definition.label} più in basso`}
-                  title="Sposta più in basso"
+                  aria-label={t('Porta {name} più in basso', { name: t(definition.label) })}
+                  title={t('Sposta più in basso')}
                 >
                   <Icon name="down" size={14} />
                 </button>
               </div>
-              <span className="sr-only">Livello {displayIndex + 1} dall'alto</span>
+              <span className="sr-only">{t('Livello {n} dall’alto', { n: displayIndex + 1 })}</span>
             </li>
           );
         })}

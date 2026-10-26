@@ -3,6 +3,7 @@ import { useUiStore } from '../uiStore';
 import { useLayoutStore } from './layoutStore';
 import { metersPerPixel } from '../../geo/projection';
 import { featureProvenance, provenanceWord } from '../../render/provenance';
+import { useLocale, useT } from '../../i18n';
 import { Icon } from '../components/Icon';
 
 const TOOL_LABELS: Record<string, string> = {
@@ -19,9 +20,9 @@ const TOOL_LABELS: Record<string, string> = {
   calibrate: 'Calibra',
 };
 
-function fmt(value: number | null | undefined, digits: number): string {
+function fmt(value: number | null | undefined, digits: number, locale: string): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('it-IT', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return value.toLocaleString(locale === 'it' ? 'it-IT' : 'en-GB', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 function memoryLabel(bytes: number | undefined): string {
@@ -39,30 +40,38 @@ export function StatusBar() {
   const saveState = useProjectStore((state) => state.saveState);
   const saveError = useProjectStore((state) => state.saveError);
   const storage = useProjectStore((state) => state.storage);
+  const autoJob = useProjectStore((state) => state.autoJob);
   const layout = useLayoutStore();
+  const locale = useLocale();
+  const t = useT();
   const mpp = metersPerPixel(project);
 
   const selectedFeatures = project.features.filter((feature) => selection.includes(feature.id));
   const provenanceSet = new Set(selectedFeatures.map((feature) => featureProvenance(feature)));
-  const provenance = provenanceSet.size === 1 && selectedFeatures.length ? provenanceWord([...provenanceSet][0]) : provenanceSet.size > 1 ? 'misto' : null;
+  const provenance =
+    provenanceSet.size === 1 && selectedFeatures.length
+      ? t(provenanceWord([...provenanceSet][0]))
+      : provenanceSet.size > 1
+        ? t('misto')
+        : null;
 
   const saveLabel =
-    saveState === 'saving' ? 'salvataggio…' : saveState === 'error' ? 'errore di salvataggio' : saveState === 'saved' ? 'salvato' : 'dati locali';
+    saveState === 'saving' ? t('salvataggio…') : saveState === 'error' ? t('errore di salvataggio') : saveState === 'saved' ? t('salvato') : t('dati locali');
 
   return (
-    <footer className="status-bar status-bar-pro" aria-label="Barra di stato">
+    <footer className="status-bar status-bar-pro" aria-label={t('Barra di stato')}>
       <div className="status-segment coords">
         <Icon name="compass" size={12} />
         {cursor ? (
           <>
-            <span className="mono">x {fmt(cursor.px, 1)} · y {fmt(cursor.py, 1)} px</span>
+            <span className="mono">x {fmt(cursor.px, 1, locale)} · y {fmt(cursor.py, 1, locale)} px</span>
             {cursor.lon != null && cursor.lat != null && (
-              <span className="mono status-secondary">{fmt(cursor.lat, 6)}, {fmt(cursor.lon, 6)}</span>
+              <span className="mono status-secondary">{fmt(cursor.lat, 6, locale)}, {fmt(cursor.lon, 6, locale)}</span>
             )}
-            {!cursor.insideImage && <span className="status-muted">fuori immagine</span>}
+            {!cursor.insideImage && <span className="status-muted">{t('fuori immagine')}</span>}
           </>
         ) : (
-          <span className="status-muted">sposta il puntatore sulla mappa</span>
+          <span className="status-muted">{t('sposta il puntatore sulla mappa')}</span>
         )}
       </div>
 
@@ -70,20 +79,20 @@ export function StatusBar() {
         <span className="status-label">Zoom</span>
         <span className="mono">{Math.round(view.scale * 100)}%</span>
         <span className="status-divider" />
-        <span className="mono">{mpp ? `${fmt(mpp, mpp < 1 ? 3 : 2)} m/px` : 'pixel'}</span>
+        <span className="mono">{mpp ? `${fmt(mpp, mpp < 1 ? 3 : 2, locale)} m/px` : t('pixel')}</span>
         <span className="status-divider" />
-        <span>{layout.rulers ? `righelli ${layout.rulerUnit}` : 'righelli off'}</span>
+        <span>{layout.rulers ? `${t('righelli')} ${t(layout.rulerUnit === 'px' ? 'pixel' : layout.rulerUnit === 'm' ? 'metri' : 'gradi')}` : t('righelli off')}</span>
       </div>
 
       <div className="status-segment">
-        <span className="status-label">Strumento</span>
-        <span>{TOOL_LABELS[activeTool] ?? activeTool}</span>
-        {layout.crosshair && <span className="status-muted">mirino</span>}
+        <span className="status-label">{t('Strumento')}</span>
+        <span>{t(TOOL_LABELS[activeTool] ?? activeTool)}</span>
+        {layout.crosshair && <span className="status-muted">{t('Mirino')}</span>}
       </div>
 
       <div className="status-segment">
-        <span className="status-label">Selezione</span>
-        <span>{selection.length ? `${selection.length} element${selection.length === 1 ? 'o' : 'i'}` : 'nessuna'}</span>
+        <span className="status-label">{t('Selezione')}</span>
+        <span>{selection.length ? t(selection.length === 1 ? '{n} elemento' : '{n} elementi', { n: selection.length }) : t('nessuna')}</span>
         {provenance && (
           <>
             <span className="status-divider" />
@@ -94,15 +103,23 @@ export function StatusBar() {
 
       <div className="status-spacer" />
 
-      <div className={`status-segment status-save status-${saveState}`} title={saveError ?? 'Salvataggio automatico in IndexedDB'}>
+      {autoJob.running && (
+        <div className="status-segment status-auto" title={autoJob.phase}>
+          <Icon name="wand" size={12} />
+          <span>{autoJob.phase}</span>
+          <span className="mono">{Math.round(autoJob.percent)}%</span>
+        </div>
+      )}
+
+      <div className={`status-segment status-save status-${saveState}`} title={saveError ?? t('Salvataggio automatico in IndexedDB')}>
         <span className="status-dot" aria-hidden="true" />
         <span>{saveLabel}</span>
       </div>
-      <div className="status-segment status-muted" title="Spazio stimato occupato dal progetto locale">
+      <div className="status-segment status-muted" title={t('Spazio stimato occupato dal progetto locale')}>
         <Icon name="layers" size={12} /> {memoryLabel(storage?.usage)}
       </div>
       <div className="status-segment status-muted">
-        <Icon name="shield" size={12} /> bozza preliminare
+        <Icon name="shield" size={12} /> {t('bozza preliminare')}
       </div>
     </footer>
   );

@@ -91,7 +91,8 @@ export function HelpModal({
         <ol className="help-steps">
           <li><strong>Importa</strong> JPG/PNG insieme a world file e .prj. Senza world file le misure restano in pixel.</li>
           <li><strong>Controlla la georeferenziazione</strong> nel pannello Progetto. Se manca la proiezione, la scala non è metrica.</li>
-          <li><strong>Interpreta</strong> classificazione, OSM e DEM come indizi sperimentali, non come verità.</li>
+          <li><strong>Automatizza</strong> con AI → Elaborazione automatica completa: OSM, classificazione, vettorizzazione, AI, curve e livello simboli in un solo comando. Gli avvisi non bloccano il lavoro già completato.</li>
+          <li><strong>Interpreta</strong> classificazione, AI, OSM e DEM come indizi sperimentali, non come verità.</li>
           <li><strong>Disegna e correggi</strong> aree, linee e percorso con snap ai vertici o alla griglia.</li>
           <li><strong>Verifica</strong> sul campo solo gli elementi che hai realmente controllato; dichiaralo nel pannello Proprietà.</li>
           <li><strong>Esporta</strong> PNG, SVG, PDF, OMAP, GeoJSON, GPX o KML. Controlla le avvertenze incluse.</li>
@@ -146,7 +147,7 @@ export function HelpModal({
             <ul className="plain-list">
               <li>PNG 1×/2×/3× con barra metrica e attribuzioni.</li>
               <li>SVG vettoriale, PDF A4/A3.</li>
-              <li>OMAP XML v9 (OpenOrienteering Mapper 0.9.x, simboli semplificati).</li>
+              <li>OMAP XML v9 (OpenOrienteering Mapper 0.9.x, simboli semplificati, incluso il punto albero AI).</li>
               <li>GeoJSON, GPX, KML e progetto .terrain-o.json.</li>
             </ul>
           </div>
@@ -163,7 +164,8 @@ export function HelpModal({
         <ul className="plain-list">
           <li><strong>OSM</strong>: Overpass API, © OpenStreetMap contributors (ODbL). Dati potenzialmente incompleti o disallineati.</li>
           <li><strong>DEM</strong>: AWS Terrain Tiles (Mapzen Terrarium, circa 30 m). Quote indicative, non rilievo.</li>
-          <li><strong>Classificazione</strong>: pipeline locale L*a*b* + superpixel SLIC + regole interpretabili con confidenza; non è riconoscimento semantico né machine learning.</li>
+          <li><strong>Classificazione</strong>: pipeline locale L*a*b* + superpixel SLIC + regole interpretabili con confidenza.</li>
+          <li><strong>Riconoscimento AI</strong>: random forest locale addestrato su OSM, elementi manuali e pseudo-etichette; dipende dalla qualità degli esempi e non è una verità sul terreno. Il livello simboli unifica automaticamente AI, OSM e vettorizzazione — aree, linee e punti — senza toccare elementi manuali o verificati.</li>
           <li>Nessun import GeoTIFF, nessuna navigazione GPS, nessuna collaborazione in tempo reale.</li>
           <li>Nessuna garanzia di conformità agli standard IOF: i simboli OMAP sono una base semplificata.</li>
         </ul>

@@ -39,6 +39,7 @@ const SYMBOL_IDS = {
   controlNumber: 12,
   contour: 13,
   indexContour: 14,
+  tree: 15,
 } as const;
 
 const AREA_SYMBOL: Record<string, number> = {
@@ -61,6 +62,7 @@ const POINT_SYMBOL: Record<string, number> = {
   start: SYMBOL_IDS.start,
   control: SYMBOL_IDS.control,
   finish: SYMBOL_IDS.finish,
+  tree: SYMBOL_IDS.tree,
 };
 
 const COLORS = [
@@ -107,6 +109,7 @@ function symbolDefinitions(): string {
     `<symbol type="8" id="12" code="704" name="Numero controllo"><text_symbol icon_text="5"><font family="Sans Serif" size="5588"/><text color="5" line_spacing="1" paragraph_spacing="0" character_spacing="0" kerning="true"/></text_symbol></symbol>`,
     `<symbol type="2" id="13" code="101" name="Curva di livello"><line_symbol color="4" line_width="140" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="4000" break_length="1000" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol>`,
     `<symbol type="2" id="14" code="101.1" name="Curva direttrice"><line_symbol color="4" line_width="250" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="4000" break_length="1000" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol>`,
+    `<symbol type="1" id="15" code="" name="Albero isolato"><description>Albero isolato rilevato automaticamente. Simbolo semplificato, non verificato.</description><point_symbol inner_radius="1400" inner_color="1" outer_width="120" outer_color="0" elements="0"/></symbol>`,
   ].join('\n');
 }
 
@@ -368,7 +371,7 @@ ${buildGeoreferencing(project)}
 ${colorTable()}
 </colors>
 <barrier version="6" required="0.6.0">
-<symbols count="15" id="Terrain / O — base ISOM semplificata">
+<symbols count="16" id="Terrain / O — base ISOM semplificata">
 ${symbolDefinitions()}
 </symbols>
 <parts count="1" current="0">
@@ -398,7 +401,7 @@ export function omapDebugInfo(project: Project): {
   const mmPerPixel = mp ? (mp * 1000) / project.printScale : 0.1;
   return {
     unitsPerPixel: mmPerPixel * 1000,
-    symbolCount: 15,
+    symbolCount: 16,
     objectCount: project.features.length,
     typeCounts: project.features.reduce<Record<string, number>>((acc, feature) => {
       acc[feature.type] = (acc[feature.type] ?? 0) + 1;

@@ -1,5 +1,7 @@
 import type { ContourLine, Feature, LayerId, Point, Project } from '../model/types';
 import { typeSpec } from '../model/constants';
+import { osmSemanticOf } from '../osm/semantic';
+import { osmAreaStyle, osmLineStyle } from '../osm/style';
 import { courseRoute } from '../geo/projection';
 import {
   PROVENANCE_STYLES,
@@ -173,7 +175,10 @@ function drawAreaOrLineLayers(
   labels: RenderOptions['labels'],
 ): void {
   for (const feature of project.features) {
-    if (feature.kind === 'point') continue;
+    // Course points are painted by drawCourse, which knows their symbol and
+    // control code. Every other point (for example AI-detected trees) belongs
+    // to the cartographic layers and must be visible here.
+    if (feature.kind === 'point' && ['start', 'control', 'finish'].includes(feature.type)) continue;
     drawFeature(ctx, feature, unit, selected.has(feature.id), labels ?? 'none');
   }
 }
@@ -200,19 +205,43 @@ function drawContours(ctx: CanvasRenderingContext2D, contours: ContourLine[], un
 
 function drawOsm(ctx: CanvasRenderingContext2D, project: Project, unit: number): void {
   for (const way of project.osmWays) {
-    if (way.coords.length < 2) continue;
+    if (!way.coords.length) continue;
+    const info = osmSemanticOf(way);
     ctx.save();
-    if (way.kind === 'waterway') {
-      ctx.strokeStyle = '#0284c7';
-      ctx.lineWidth = 1.3 * unit;
-    } else if (way.highway && ['path', 'footway', 'track', 'bridleway', 'cycleway', 'steps'].includes(way.highway)) {
-      ctx.strokeStyle = '#be185d';
-      ctx.lineWidth = 1.2 * unit;
-      ctx.setLineDash([4 * unit, 3 * unit]);
-    } else {
-      ctx.strokeStyle = '#b45309';
-      ctx.lineWidth = 2 * unit;
+    if (way.kind === 'tree' || info.semantic === 'tree') {
+      const point = way.coords[0];
+      ctx.fillStyle = '#3f8f4b';
+      ctx.strokeStyle = 'rgba(20, 27, 34, 0.55)';
+      ctx.lineWidth = 0.6 * unit;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, Math.max(1.2, 1.7 * unit), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      continue;
     }
+    if (info.area && way.coords.length >= 3) {
+      const style = osmAreaStyle(info.semantic);
+      ctx.fillStyle = style.fill;
+      ctx.strokeStyle = style.stroke;
+      ctx.lineWidth = 1 * unit;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      pathForRing(ctx, way.coords, true);
+      for (const hole of way.holes ?? []) pathForRing(ctx, hole, true);
+      ctx.fill('evenodd');
+      ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (way.coords.length < 2) {
+      ctx.restore();
+      continue;
+    }
+    const style = osmLineStyle(info.semantic);
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = style.width * unit;
+    if (style.dash) ctx.setLineDash(style.dash.map((value) => value * unit));
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -221,6 +250,8 @@ function drawOsm(ctx: CanvasRenderingContext2D, project: Project, unit: number):
     ctx.restore();
   }
 }
+
+
 
 function drawCoursePoint(
   ctx: CanvasRenderingContext2D,

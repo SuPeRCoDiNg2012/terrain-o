@@ -70,33 +70,52 @@ export function slic(features: PixelFeatures, options: SlicOptions): SlicResult 
   }
 
   const labels = new Int32Array(width * height).fill(-1);
+  const previous = new Int32Array(width * height).fill(-1);
   const distances = new Float32Array(width * height);
   const iterations = Math.max(1, Math.min(12, options.iterations));
+  const spatialWeight = (compactness / step) ** 2;
+  const dxWeights = new Float32Array(2 * step + 2);
+  const convergenceLimit = Math.max(1, Math.floor(labels.length * 0.001));
 
   for (let iteration = 0; iteration < iterations; iteration++) {
+    previous.set(labels);
     distances.fill(Infinity);
     labels.fill(-1);
 
     for (let centre = 0; centre < count; centre++) {
-      const x0 = Math.max(0, Math.floor(cx[centre] - step));
-      const x1 = Math.min(width - 1, Math.ceil(cx[centre] + step));
-      const y0 = Math.max(0, Math.floor(cy[centre] - step));
-      const y1 = Math.min(height - 1, Math.ceil(cy[centre] + step));
+      const centreX = cx[centre];
+      const centreY = cy[centre];
+      const x0 = Math.max(0, Math.floor(centreX - step));
+      const x1 = Math.min(width - 1, Math.ceil(centreX + step));
+      const y0 = Math.max(0, Math.floor(centreY - step));
+      const y1 = Math.min(height - 1, Math.ceil(centreY + step));
+      const span = x1 - x0 + 1;
+      for (let offset = 0; offset < span; offset++) {
+        const dx = x0 + offset - centreX;
+        dxWeights[offset] = dx * dx * spatialWeight;
+      }
       const l = cl[centre];
       const aa = ca[centre];
       const bb = cb[centre];
       for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
-          const pixel = y * width + x;
+        const rowOffset = y * width;
+        const dy = y - centreY;
+        const dyWeight = dy * dy * spatialWeight;
+        let weightIndex = 0;
+        for (let x = x0; x <= x1; x++, weightIndex++) {
+          const pixel = rowOffset + x;
+          const limit = distances[pixel];
+          const space = dxWeights[weightIndex] + dyWeight;
+          // The spatial term is a lower bound for the full distance: if it
+          // already loses, the colour channels cannot make this centre win.
+          if (space >= limit) continue;
           const dL = L[pixel] - l;
+          let distance = dL * dL + space;
+          if (distance >= limit) continue;
           const dA = a[pixel] - aa;
           const dB = b[pixel] - bb;
-          const colour = dL * dL + dA * dA + dB * dB;
-          const dx = x - cx[centre];
-          const dy = y - cy[centre];
-          const space = (dx * dx + dy * dy) * ((compactness / step) ** 2);
-          const distance = colour + space;
-          if (distance < distances[pixel]) {
+          distance += dA * dA + dB * dB;
+          if (distance < limit) {
             distances[pixel] = distance;
             labels[pixel] = centre;
           }
@@ -106,11 +125,14 @@ export function slic(features: PixelFeatures, options: SlicOptions): SlicResult 
 
     const sums = new Float64Array(count * 5);
     const counts = new Uint32Array(count);
+    let changed = 0;
     for (let y = 0; y < height; y++) {
+      const rowOffset = y * width;
       for (let x = 0; x < width; x++) {
-        const pixel = y * width + x;
-        let label = labels[pixel];
-        if (label < 0) label = 0;
+        const pixel = rowOffset + x;
+        const assigned = labels[pixel];
+        if (assigned !== previous[pixel]) changed++;
+        const label = assigned < 0 ? 0 : assigned;
         counts[label]++;
         const base = label * 5;
         sums[base] += x;
@@ -121,15 +143,26 @@ export function slic(features: PixelFeatures, options: SlicOptions): SlicResult 
       }
     }
 
+    let maxShiftSquared = 0;
     for (let centre = 0; centre < count; centre++) {
       if (!counts[centre]) continue;
       const base = centre * 5;
-      cx[centre] = sums[base] / counts[centre];
-      cy[centre] = sums[base + 1] / counts[centre];
+      const nextX = sums[base] / counts[centre];
+      const nextY = sums[base + 1] / counts[centre];
+      const shiftX = nextX - cx[centre];
+      const shiftY = nextY - cy[centre];
+      const shiftSquared = shiftX * shiftX + shiftY * shiftY;
+      if (shiftSquared > maxShiftSquared) maxShiftSquared = shiftSquared;
+      cx[centre] = nextX;
+      cy[centre] = nextY;
       cl[centre] = sums[base + 2] / counts[centre];
       ca[centre] = sums[base + 3] / counts[centre];
       cb[centre] = sums[base + 4] / counts[centre];
     }
+
+    // A stable centre grid means further iterations only flip boundary pixels
+    // back and forth. Stop early instead of paying for another full pass.
+    if (iteration > 0 && (changed < convergenceLimit || maxShiftSquared < 0.0625)) break;
   }
 
   // Any unassigned pixel takes the nearest centre (rare after distance updates).

@@ -7,6 +7,7 @@ const FIXTURES = path.resolve('e2e/fixtures');
 async function openApp(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('terrain-o:onboarding-v1', 'seen');
+    if (!localStorage.getItem('terrain-o/locale/v1')) localStorage.setItem('terrain-o/locale/v1', 'it');
   });
   await page.goto('/');
   await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -42,6 +43,124 @@ test.describe('Terrain / O desktop shell', () => {
     await expect(page.locator('.map-legend')).toHaveCount(0);
   });
 
+  test('opens every desktop menu, runs a command and supports keyboard navigation', async ({ page }) => {
+    const labels = [
+      'File',
+      'Modifica',
+      'Visualizza',
+      'Strumenti',
+      'Classificazione',
+      'Vettorizzazione',
+      'AI',
+      'OSM',
+      'Esporta',
+      'Aiuto',
+    ];
+    for (const label of labels) {
+      await page.getByRole('menuitem', { name: label, exact: true }).click();
+      await expect(page.getByRole('menu', { name: label })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('menu', { name: label })).toHaveCount(0);
+    }
+
+    await page.getByRole('menuitem', { name: 'AI', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: /Elaborazione automatica completa/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // A real click on the first row must reach the item, not the workspace
+    // behind it: this is the regression for the clipped dropdown bug.
+    await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: /Guida e scorciatoie/ }).click();
+    await expect(page.getByRole('dialog')).toContainText('Scorciatoie da tastiera');
+    await page.getByRole('dialog').getByRole('button', { name: 'Chiudi', exact: true }).last().click();
+
+    await page.locator('[data-menu-trigger="file"]').focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menu', { name: 'File' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Nuovo progetto/ })).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('menu', { name: 'Modifica' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-menu-trigger="edit"]')).toBeFocused();
+  });
+
+  test('keeps the menu usable in a small desktop window and switches language', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 720 });
+    await page.getByRole('menuitem', { name: 'Visualizza', exact: true }).click();
+    const menu = page.getByRole('menu', { name: 'Visualizza' });
+    await expect(menu).toBeVisible();
+    const box = await menu.boundingBox();
+    expect(box).not.toBeNull();
+    if (box) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(1024);
+      expect(box.y + box.height).toBeLessThanOrEqual(720);
+    }
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: 'Switch to English' }).click();
+    await expect(page.getByRole('menuitem', { name: 'View', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Layers' })).toBeVisible();
+    await expect(page.locator('.menu-bar-draft')).toHaveText('PRELIMINARY DRAFT');
+
+    // The choice is stored and survives a reload.
+    await page.reload();
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'File', exact: true })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Visualizza', exact: true })).toHaveCount(0);
+  });
+
+  test('imports into a database left broken by an early build', async ({ page }) => {
+    // Seed the schema produced by early builds on the app origin before the
+    // application boots. `assets` has no inline key, so every asset put()
+    // rejects with "the object store uses out-of-line keys".
+    await page.route('**/__indexeddb-seed', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>seed</title>' }),
+    );
+    await page.goto('/__indexeddb-seed');
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase('terrain-o');
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+        request.onblocked = () => resolve();
+      });
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('terrain-o', 3);
+        request.onupgradeneeded = () => {
+          const database = request.result;
+          database.createObjectStore('projects', { keyPath: 'id' });
+          database.createObjectStore('assets');
+          database.createObjectStore('backups', { keyPath: 'key' });
+          database.createObjectStore('osmCache', { keyPath: 'key' });
+        };
+        request.onsuccess = () => {
+          request.result.close();
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+    });
+
+    await openApp(page);
+    await importFixture(page);
+
+    // The repaired project must also survive a reload.
+    await page.reload();
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page.locator('.image-card')).toContainText('alpine.png');
+  });
+
+  test('does not start a classification preview until its panel is opened', async ({ page }) => {
+    await importFixture(page);
+    await page.waitForTimeout(1500);
+    await expect(page.locator('.classification-preview-layer')).toHaveCount(0);
+
+    await page.getByRole('tab', { name: 'Classificazione' }).click();
+    await expect(page.locator('.classification-preview')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.classification-preview-layer')).toHaveCount(1);
+  });
+
   test('classifies, vectorizes and validates the automatic geometry', async ({ page }) => {
     await importFixture(page);
 
@@ -55,13 +174,89 @@ test.describe('Terrain / O desktop shell', () => {
     await page.getByTestId('dialog-confirm').click();
     await expect
       .poll(async () => {
-        const text = await page.locator('.counter-row').innerText();
+        const text = await page.locator('.counter-row').first().innerText();
         return Number(text.match(/(\d+) poligoni/)?.[1] ?? 0);
       })
       .toBeGreaterThan(0);
 
     await page.getByRole('button', { name: 'Valida topologia' }).click();
     await expect(page.getByText(/Topologia valida|problemi di topologia/i).last()).toBeVisible();
+  });
+
+  test('runs the local AI recognizer and unifies the symbol layer', async ({ page }) => {
+    await importFixture(page);
+
+    await page.getByRole('tab', { name: 'AI', exact: true }).click();
+    await expect(page.getByText('Risultato sperimentale.')).toBeVisible();
+    await page.getByTestId('run-ai').click();
+    await expect(page.getByText(/Riconoscimento completato|validazione/i).first()).toBeVisible({
+      timeout: 120_000,
+    });
+    await expect(page.getByText(/Riconoscimento AI|validazione holdout/i).first()).toBeVisible();
+    // Fusion now runs as part of recognition, so the unified layer is already
+    // reported before the explicit button is pressed.
+    await expect(page.getByText('Duplicati rimossi')).toBeVisible();
+
+    await page.getByTestId('fuse-symbols').click();
+    await expect(page.getByText(/Livello simboli unificato|Nessun duplicato automatico/i)).toBeVisible();
+    await expect(page.getByText('?', { exact: true })).toHaveCount(0);
+  });
+
+  test('runs the whole map preparation from one automatic action', async ({ page }) => {
+    await importFixture(page);
+
+    await page.getByRole('tab', { name: 'AI', exact: true }).click();
+    // Keep the end-to-end test deterministic: no external OSM or DEM request.
+    await page.getByText('Scarica anche OSM', { exact: true }).click();
+    await page.getByText('Genera anche le curve di livello', { exact: true }).click();
+    await page.getByTestId('run-auto-pipeline').click();
+
+    await expect(page.getByText('Simboli totali', { exact: true })).toBeVisible({ timeout: 180_000 });
+    await expect(page.getByText('Duplicati uniti', { exact: true })).toBeVisible();
+    await expect(page.getByText(/simboli totali/i).first()).toBeVisible();
+    await expect(page.locator('.status-bar-pro')).not.toContainText('Elaborazione annullata');
+  });
+
+  test('runs the one-click pipeline with OSM, buildings and trees from a mocked source', async ({ page }) => {
+    await page.route('**/api/interpreter**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          elements: [
+            {
+              type: 'way',
+              id: 910001,
+              tags: { building: 'yes', name: 'Edificio prova' },
+              geometry: [
+                { lat: 47.274, lon: 11.36 },
+                { lat: 47.274, lon: 11.361 },
+                { lat: 47.273, lon: 11.361 },
+                { lat: 47.273, lon: 11.36 },
+                { lat: 47.274, lon: 11.36 },
+              ],
+            },
+            {
+              type: 'node',
+              id: 910002,
+              lat: 47.275,
+              lon: 11.365,
+              tags: { natural: 'tree' },
+            },
+          ],
+        }),
+      });
+    });
+
+    await importFixture(page);
+    await page.getByRole('tab', { name: 'AI', exact: true }).click();
+    // OSM is on by default; contours stay off so the test needs no DEM route.
+    await page.getByText('Genera anche le curve di livello', { exact: true }).click();
+    await page.getByTestId('run-auto-pipeline').click();
+
+    await expect(page.getByText('Simboli totali', { exact: true })).toBeVisible({ timeout: 180_000 });
+    await expect(page.getByText(/2 grezzi · 2 simboli/)).toBeVisible();
+    await expect(page.getByText(/Duplicati uniti/)).toBeVisible();
   });
 
   test('declares a verification and revokes it automatically on geometry edits', async ({ page }) => {

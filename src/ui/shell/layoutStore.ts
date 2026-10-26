@@ -7,6 +7,7 @@ export type PanelId =
   | 'properties'
   | 'classification'
   | 'vectorize'
+  | 'ai'
   | 'history'
   | 'info'
   | 'navigator'
@@ -24,6 +25,7 @@ export const PANEL_LABELS: Record<PanelId, { label: string; short: string }> = {
   properties: { label: 'Proprietà', short: 'Proprietà' },
   classification: { label: 'Classificazione', short: 'Classificazione' },
   vectorize: { label: 'Vettorizzazione', short: 'Vettoriz.' },
+  ai: { label: 'Riconoscimento AI', short: 'AI' },
   history: { label: 'Storia', short: 'Storia' },
   info: { label: 'Info', short: 'Info' },
   navigator: { label: 'Navigatore', short: 'Navigatore' },
@@ -35,6 +37,8 @@ export const PANEL_LABELS: Record<PanelId, { label: string; short: string }> = {
 const STORAGE_KEY = 'terrain-o/ui-layout/v1';
 
 interface PersistedLayout {
+  /** Bumped when a new panel is introduced, so saved layouts can add it. */
+  version: number;
   left: PanelId[];
   right: PanelId[];
   bottom: PanelId[];
@@ -52,8 +56,9 @@ interface PersistedLayout {
 }
 
 const DEFAULTS: PersistedLayout = {
+  version: 2,
   left: ['project', 'osm', 'dem', 'course'],
-  right: ['layers', 'features', 'properties', 'classification', 'vectorize', 'history', 'info', 'navigator'],
+  right: ['layers', 'features', 'properties', 'classification', 'vectorize', 'ai', 'history', 'info', 'navigator'],
   bottom: [],
   active: { left: 'project', right: 'layers', bottom: 'history' },
   collapsed: { left: false, right: false, bottom: false },
@@ -94,12 +99,19 @@ function load(): PersistedLayout {
     const left = sanitizePanels(parsed.left, DEFAULTS.left);
     const right = sanitizePanels(parsed.right, DEFAULTS.right);
     const bottom = sanitizePanels(parsed.bottom, DEFAULTS.bottom);
+    // Layouts saved before the AI panel existed get it appended once, without
+    // rearranging the panels the user already positioned.
+    if ((parsed.version ?? 1) < 2) {
+      const present = new Set<PanelId>([...left, ...right, ...bottom]);
+      if (!present.has('ai')) right.push('ai');
+    }
     const active = {
       left: isPanel(parsed.active?.left) && left.includes(parsed.active.left) ? parsed.active.left : (left[0] ?? 'project'),
       right: isPanel(parsed.active?.right) && right.includes(parsed.active.right) ? parsed.active.right : (right[0] ?? 'layers'),
       bottom: isPanel(parsed.active?.bottom) && bottom.includes(parsed.active.bottom) ? parsed.active.bottom : (bottom[0] ?? 'history'),
     };
     return {
+      version: 2,
       left,
       right,
       bottom,
@@ -154,6 +166,7 @@ function persist(state: LayoutState): void {
   if (typeof localStorage === 'undefined') return;
   try {
     const payload: PersistedLayout = {
+      version: 2,
       left: state.left,
       right: state.right,
       bottom: state.bottom,
