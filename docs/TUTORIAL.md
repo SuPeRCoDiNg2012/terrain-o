@@ -1,6 +1,6 @@
 # Terrain / O — Manuale completo
 
-**Versione 0.6.0 · Bozza preliminare**
+**Versione 0.7.0 · Bozza preliminare**
 
 English edition: [TUTORIAL.en.md](TUTORIAL.en.md).
 
@@ -33,17 +33,11 @@ oppure consultato come riferimento mentre si lavora.
 14. [Livelli](#14-livelli)
 15. [Classificazione](#15-classificazione)
 16. [Vettorizzazione](#16-vettorizzazione)
-17. [OpenStreetMap](#17-openstreetmap)
-18. [Curve di livello DEM](#18-curve-di-livello-dem)
-19. [Percorso e controlli](#19-percorso-e-controlli)
-20. [Esportazione](#20-esportazione)
-21. [Salvataggio, progetto e spazio locale](#21-salvataggio-progetto-e-spazio-locale)
-22. [Scorciatoie complete](#22-scorciatoie-complete)
-23. [Uso touch e mobile](#23-uso-touch-e-mobile)
-24. [Flussi di lavoro completi](#24-flussi-di-lavoro-completi)
-25. [Risoluzione dei problemi](#25-risoluzione-dei-problemi)
-26. [Limiti espliciti](#26-limiti-espliciti)
-27. [Appendice tecnica](#27-appendice-tecnica)
+17. [Import / export, OSM, DEM, tracciato](#17-import-export-osm-dem-tracciato)
+18. [Il file .omap](#18-il-file-omap)
+19. [Risoluzione dei problemi](#19-risoluzione-dei-problemi)
+20. [Appendice](#20-appendice)
+21. [Qualità misurata](#21-qualità-misurata)
 
 ---
 
@@ -1470,3 +1464,24 @@ drawer, la palette è orizzontale, i menu sono a comparsa. Le funzioni restano l
 Terrain / O è uno strumento di lavoro per bozze preliminari. Non sostituisce il rilievo
 sul campo, non certifica la mappa e non dichiara la conformità IOF. La verifica è
 sempre una dichiarazione esplicita dell'utente, e ogni modifica geometrica la revoca.
+
+---
+
+## 21. Qualità misurata
+
+La pipeline non è verificata "a occhio". `src/classify/realistic.test.ts` costruisce
+un'ortofoto sintetica 960×720 con verità a terra nota (bosco con 420 chiome, prato,
+lago, stagno, strada, edificio, roccia, ombre) e misura:
+
+- accuratezza complessiva e IoU per classe, su scena pulita e su una variante con
+  ombra forte, sfocatura e grana;
+- precisione e richiamo del rilevamento chiome, e assenza di rilevamenti sul bordo
+  del bosco;
+- copertura dell'area, errore d'area per classe, fori conservati, poligoni invalidi
+  e vertici condivisi fra classi adiacenti.
+
+Se un numero peggiora, il test fallisce e la CI si ferma. I valori attuali, il metodo
+completo e i limiti sono in [QUALITY.md](QUALITY.md) (edizione inglese
+[QUALITY.en.md](QUALITY.en.md)). Un audit end-to-end separato importa la stessa
+scena nell'editor, esegue **Esegui tutto** e valida i file esportati: GeoJSON senza
+anelli aperti né auto-intersezioni, OMAP con i simboli attesi, PNG e SVG completi.

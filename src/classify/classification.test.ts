@@ -117,22 +117,24 @@ describe('interpretable ISOM rules', () => {
   });
 
   it('lets an OSM prior settle an ambiguous surface', () => {
+    // A dark bluish surface the imagery reads as water, while legacy map data
+    // still carries a small built feature there: the prior settles the tie.
     const ambiguous = {
       L: 45,
-      a: -10,
-      b: -8,
+      a: 0,
+      b: -11,
       sat: 0.3,
       value: 0.45,
       variance: 60,
       lbp: 0.2,
       edgeDensity: 0.1,
     };
-    expect(match(ambiguous).classId).toBe(CLASS_VEG);
+    expect(match(ambiguous).classId).toBe(CLASS_WATER);
     const withPrior = classifySignature(ambiguous, DEFAULT_CLASSIFICATION_PARAMS, {
-      classId: CLASS_WATER,
+      classId: CLASS_ART,
       coverage: 0.9,
     });
-    expect(withPrior.classId).toBe(CLASS_WATER);
+    expect(withPrior.classId).toBe(CLASS_ART);
   });
 
   it('does not let an outdated OSM prior override decisive imagery', () => {

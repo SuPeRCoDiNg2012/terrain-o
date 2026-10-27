@@ -9,7 +9,13 @@ export interface VectorizeOptions {
   minAreaPx: number;
   /** Minimum hole area in square working pixels. */
   minHoleAreaPx: number;
-  /** 0–1 confidence required to keep a pixel. */
+  /**
+   * 0–1 confidence required to keep a pixel. This is a floor for pixels the
+   * classifier barely assigned, not a quality filter: a class the rules decided
+   * with moderate confidence is still map content, and cutting it out punches
+   * holes between polygons. The explicit "unknown" class is what marks
+   * genuinely undecided ground.
+   */
   confidenceThreshold: number;
   /** Prefer the most specific class when two classes compete. */
   hierarchyPriority: boolean;
@@ -28,7 +34,7 @@ export const DEFAULT_VECTORIZE_OPTIONS: VectorizeOptions = {
   smoothIterations: 2,
   minAreaPx: 100,
   minHoleAreaPx: 20,
-  confidenceThreshold: 0.6,
+  confidenceThreshold: 0.45,
   hierarchyPriority: true,
   reconcileEdges: true,
   categories: [1, 2, 3, 4],

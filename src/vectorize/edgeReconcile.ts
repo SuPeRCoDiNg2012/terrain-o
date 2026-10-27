@@ -1,4 +1,5 @@
 import type { Point } from '../model/types';
+import { ringSelfIntersects } from './topology';
 
 export interface ReconcileRegion {
   coords: Point[];
@@ -154,6 +155,10 @@ export function reconcilePolygons<T extends ReconcileRegion>(regions: T[], toler
             if (Math.hypot(point.x - a.x, point.y - a.y) < 1e-6) continue;
             if (Math.hypot(point.x - b.x, point.y - b.y) < 1e-6) continue;
             const owners = nodeOwners.get(nodeList[nodeIndex]);
+            // A node owned only by the ring being rebuilt is one of its own
+            // corners, not a T-junction: inserting it onto a segment turns a
+            // sharp bend into a spike. Nodes from any other ring are inserted,
+            // which is what makes a shared boundary identical on both sides.
             if (owners && owners.size === 1 && owners.has(ringId)) continue;
             const projection = projectOnSegment(point, a, b);
             if (projection.distance <= tol && projection.t > 0.001 && projection.t < 0.999) {
@@ -166,29 +171,52 @@ export function reconcilePolygons<T extends ReconcileRegion>(regions: T[], toler
       for (const candidate of candidates) rebuilt.push(candidate.point);
     }
 
-    const clean: Point[] = [];
-    for (const point of rebuilt) {
-      const last = clean[clean.length - 1];
-      if (last && Math.hypot(last.x - point.x, last.y - point.y) < 1e-7) continue;
-      clean.push(point);
-    }
-    if (clean.length > 2) {
-      const first = clean[0];
-      const last = clean[clean.length - 1];
-      if (Math.hypot(first.x - last.x, first.y - last.y) < 1e-7) clean.pop();
-    }
-    return clean.length >= 3 ? clean : original;
+    return dedupeRing(rebuilt, original);
   };
 
-  return regions.map((region, regionIndex) => ({
-    ...region,
-    coords: replaceRing(starts[regionIndex][0], region.coords.length, ringBase[regionIndex]),
-    holes: region.holes.map((hole, holeIndex) =>
-      replaceRing(
-        starts[regionIndex][holeIndex + 1],
-        hole.length,
-        ringBase[regionIndex] + 1 + holeIndex,
+  const snapOnly = (start: number, length: number): Point[] => {
+    const original: Point[] = [];
+    for (let index = 0; index < length; index++) original.push(snappedPoints[start + index]);
+    return dedupeRing(original, original);
+  };
+
+  return regions.map((region, regionIndex) => {
+    // A ring that still intersects itself is reverted on its own: one bad
+    // corner must not throw away the reconciled boundaries of every other
+    // polygon in the project.
+    const repair = (ring: Point[], start: number, length: number, ringId: number): Point[] => {
+      const candidate = replaceRing(start, length, ringId);
+      if (!ringSelfIntersects(candidate)) return candidate;
+      const snapped = snapOnly(start, length);
+      if (!ringSelfIntersects(snapped)) return snapped;
+      return ring;
+    };
+    return {
+      ...region,
+      coords: repair(region.coords, starts[regionIndex][0], region.coords.length, ringBase[regionIndex]),
+      holes: region.holes.map((hole, holeIndex) =>
+        repair(
+          hole,
+          starts[regionIndex][holeIndex + 1],
+          hole.length,
+          ringBase[regionIndex] + 1 + holeIndex,
+        ),
       ),
-    ),
-  }));
+    };
+  });
+}
+
+function dedupeRing(rebuilt: Point[], fallback: Point[]): Point[] {
+  const clean: Point[] = [];
+  for (const point of rebuilt) {
+    const last = clean[clean.length - 1];
+    if (last && Math.hypot(last.x - point.x, last.y - point.y) < 1e-7) continue;
+    clean.push(point);
+  }
+  if (clean.length > 2) {
+    const first = clean[0];
+    const last = clean[clean.length - 1];
+    if (Math.hypot(first.x - last.x, first.y - last.y) < 1e-7) clean.pop();
+  }
+  return clean.length >= 3 ? clean : fallback;
 }

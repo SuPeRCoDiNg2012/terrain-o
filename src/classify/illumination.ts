@@ -83,7 +83,11 @@ function buildGrid(
   for (let index = 0; index < gains.length; index++) {
     const mean = means[index];
     const raw = mean > 1 ? target / mean : 1;
-    const clamped = Math.max(0.62, Math.min(1.6, raw));
+    // Real orthophotos often carry shadow at 0.3–0.5 of the sunlit exposure; a
+    // 1.6× ceiling left those tiles dark, which pushed shadowed meadow below the
+    // lightness gate of the open-ground rule. The range still refuses to
+    // "correct" a genuinely dark canopy into daylight.
+    const clamped = Math.max(0.45, Math.min(2.6, raw));
     const blended = 1 + (clamped - 1) * Math.max(0, Math.min(1, strength));
     gains[index] = blended;
     const deviation = deviations[index];

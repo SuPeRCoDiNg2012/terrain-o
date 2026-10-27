@@ -54,12 +54,18 @@ Comandi di qualità:
 ```bash
 npm run typecheck
 npm run lint
-npm test             # Vitest, 120 test
+npm test             # Vitest, 124 test (include il gate di qualità sulla pipeline)
 npx playwright test  # test end-to-end (essenziale + desktop + mobile + lingua + AI + auto + OSM + simboli + landing + WCAG AA)
 npm run check        # lint + typecheck + test + build
 ```
 
 I browser Playwright vanno installati una volta con `npx playwright install chromium`.
+
+La qualità della pipeline non è lasciata al giudizio visivo: `src/classify/realistic.test.ts`
+misura accuratezza per classe, chiome rilevate, copertura e validità topologica su una
+ortofoto sintetica con verità a terra nota, e fallisce se i numeri peggiorano. I valori
+misurati, il metodo e i limiti sono in [docs/QUALITY.md](docs/QUALITY.md)
+([English](docs/QUALITY.en.md)).
 
 ---
 

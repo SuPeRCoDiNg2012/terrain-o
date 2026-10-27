@@ -90,6 +90,11 @@ export function classifySignature(
     return { classId: 0, confidence: 0.38, scores: { 0: 0.9, 1: 0, 2: 0, 3: 0, 4: 0 } };
   }
   const chroma = Math.hypot(a, b);
+  // CIE hue angle. Sector 130–190° is green (canopy), 70–125° is yellow/olive
+  // (grass, dry meadow), 220–300° is blue. Hue survives exposure changes far
+  // better than the raw a* axis: shadowed meadow has a* ≈ −11, which looks
+  // "green" on that axis alone even though it is yellow-green ground.
+  const hue = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
   const texture = clamp01(lbp * 2.2);
   const edge = clamp01(edgeDensity * 3);
   const flat = clamp01(1 - Math.min(1, variance / 220));
@@ -105,21 +110,31 @@ export function classifySignature(
       edge * 0.1;
   }
 
-  // Vegetation: green-red axis negative; dense canopy adds texture, grass does not.
-  if (a < vegAMax + 4) {
+  // Vegetation: green hue and a green-red axis that leans green. Dense canopy
+  // adds texture, mown grass does not.
+  if (a < vegAMax + 4 && hue >= 118 && hue <= 200) {
+    const greenness = clamp01((vegAMax + 4 - a) / 26);
+    const hueFit = clamp01((hue - 118) / 14) * clamp01((200 - hue) / 20);
     scores[1] =
-      clamp01((vegAMax + 4 - a) / 26) * 0.95 +
+      greenness * 0.72 +
+      hueFit * 0.2 +
       texture * textureWeight * 0.5 +
       edge * edgeWeight * 0.25 +
       (L < 62 ? 0.1 : 0);
   }
 
-  // Open ground: yellow axis positive, bright, low canopy texture.
-  if (b > openBMin - 6 && L > 38) {
+  // Open ground: warm yellow/olive hue, positive yellow axis, low canopy
+  // texture. Lightness is a soft factor rather than a gate: shadowed meadow at
+  // L ≈ 33 is still meadow, and the old L > 38 gate sent it to vegetation.
+  if (b > openBMin - 8 && hue >= 78 && hue <= 130) {
+    const warmth = clamp01((b - (openBMin - 8)) / 26) * 0.7;
+    const hueFit = clamp01(1 - Math.abs(hue - 100) / 30) * 0.22;
+    const lightness = clamp01((L - 18) / 22);
     scores[2] =
-      clamp01((b - openBMin + 6) / 30) * 0.85 +
-      flat * 0.25 +
-      (1 - texture) * textureWeight * 0.3 -
+      warmth * lightness +
+      hueFit * lightness +
+      flat * 0.22 +
+      (1 - texture) * textureWeight * 0.28 -
       edge * edgeWeight * 0.15;
   }
 
@@ -130,6 +145,15 @@ export function classifySignature(
       edge * edgeWeight * 0.35 +
       (L > 32 && L < 96 ? 0.12 : 0) -
       sat * 0.15;
+  }
+
+  // Built surfaces are not always grey: tile and metal roofs are warm ochre,
+  // terracotta or dull red. They are smooth (low variance) and sit in the
+  // orange/red hue sector, unlike yellow meadow, which is flat too but sits at
+  // 100–120°. Without this branch a roof fell through every family and came out
+  // as open ground or unknown.
+  if (hue > 5 && hue < 88 && chroma >= artChromaMax - 3 && chroma < 52 && flat > 0.5 && L > 28) {
+    scores[4] = Math.max(scores[4], 0.42 + flat * 0.2 + edge * edgeWeight * 0.25);
   }
 
   // Very dark or saturated pixels with no clear family stay explicitly unknown.
@@ -170,8 +194,14 @@ export function classifySignature(
   }
 
   const second = Math.max(...([0, 1, 2, 3, 4] as ClassIndex[]).filter((key) => key !== best).map((key) => scores[key]));
-  const margin = clamp01((bestScore - second) / (bestScore + 0.15));
-  let confidence = clamp01(0.5 + margin * 0.45 + (best === 0 ? -0.1 : 0));
+  // Confidence combines how strong the winning evidence is with how far it is
+  // from the runner-up. A rule score of 0.55 against 0.50 (open ground next to
+  // asphalt, which genuinely look alike) used to report 0.53, and the vectorizer
+  // then deleted those pixels from every mask. Evidence and separation are now
+  // both counted, so "clear but low-contrast" is not mistaken for "unknown".
+  const separation = clamp01((bestScore - second) / Math.max(0.2, bestScore));
+  let confidence = clamp01(0.42 + 0.28 * clamp01(bestScore) + 0.34 * separation);
+  if (best === 0) confidence = Math.min(confidence, 0.4);
   if (priorApplied && prior) {
     const agreement = best === prior.classId ? 1 : -1;
     confidence = clamp01(confidence + agreement * 0.06 * prior.coverage);

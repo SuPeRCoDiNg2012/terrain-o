@@ -1,6 +1,6 @@
 # Terrain / O — Complete manual (English edition)
 
-**Version 0.6.0 · Preliminary draft**
+**Version 0.7.0 · Preliminary draft**
 
 This manual documents every menu, tool, panel, shortcut and export. Read it end
 to end or keep it open as a reference while working.
@@ -40,6 +40,7 @@ to end or keep it open as a reference while working.
 24. Language and theme
 25. Keyboard reference
 26. Limits and known issues
+27. Measured quality
 
 ---
 
@@ -551,3 +552,21 @@ OSM and DEM data can be incomplete or misaligned. Automatic
 results are experimental. A verified state is a user declaration, not a
 certification by the software. Deleting browser data deletes local projects: keep
 `.terrain-o.json` exports.
+
+---
+
+## 27. Measured quality
+
+The pipeline is not verified by eye. `src/classify/realistic.test.ts` builds a
+960×720 synthetic orthophoto with known ground truth (forest with 420 crowns,
+meadow, lake, pond, road, building, rock, shadows) and measures overall accuracy
+and per-class IoU on a clean scene and on a variant with hard shadow, blur and
+grain, crown precision and recall with no detections on the forest outline, and
+coverage, per-class area error, preserved holes, invalid polygons and vertices
+shared by adjacent classes.
+
+If a number gets worse the test fails and CI stops. The current values, the full
+method and the limits are in [QUALITY.en.md](QUALITY.en.md) (Italian edition
+[QUALITY.md](QUALITY.md)). A separate end-to-end audit imports the same scene into
+the editor, runs **Run all** and validates the exported files: GeoJSON without open
+rings or self-intersections, OMAP with the expected symbols, complete PNG and SVG.

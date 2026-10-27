@@ -419,7 +419,7 @@ export function validateProject(project: Project): Project {
 export function validateProjectFile(project: Project, assets: ProjectFile['assets']): ProjectFile {
   const file: ProjectFile = {
     app: 'Terrain / O',
-    appVersion: '0.6.0',
+    appVersion: '0.7.0',
     exportedAt: new Date().toISOString(),
     project: validateProject(project),
     assets,

@@ -54,12 +54,18 @@ Quality commands:
 ```bash
 npm run typecheck
 npm run lint
-npm test             # Vitest
+npm test             # Vitest, 124 tests including the pipeline quality gate
 npx playwright test  # end-to-end desktop, mobile and WCAG AA
 npm run check        # lint + typecheck + test + build
 ```
 
 Install the Playwright browser once with `npx playwright install chromium`.
+
+Pipeline quality is not left to visual judgement: `src/classify/realistic.test.ts`
+measures per-class accuracy, detected crowns, coverage and topological validity on
+a synthetic orthophoto with known ground truth, and fails when the numbers get
+worse. The measured values, the method and the limits are in
+[docs/QUALITY.en.md](docs/QUALITY.en.md) ([italiano](docs/QUALITY.md)).
 
 ---
 
@@ -274,7 +280,7 @@ symbol sets; see [NOTICE.md](NOTICE.md).
 
 ## 7. Tests and benchmarks
 
-- 120 Vitest unit/integration tests, including golden synthetic orthophotos,
+- 124 Vitest unit/integration tests, including golden synthetic orthophotos,
   random forest, tree detection, AI training labels, automatic pipeline
   orchestration and symbol fusion, OSM multipolygon/semantic/prior fusion,
   property-based vectorization invariants, IndexedDB repair and a 4000×4000

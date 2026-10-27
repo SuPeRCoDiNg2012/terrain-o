@@ -179,6 +179,13 @@ export function extractContours(mask: Uint8Array, width: number, height: number)
       let chosen = -1;
       let bestTurn = 5;
       for (let candidate = firstOut[endKey]; candidate !== -1; candidate = nextOut[candidate]) {
+        // Going back along an already-walked edge would close a different loop;
+        // the only used edge this walk may take is its own start, which closes
+        // the ring. The previous version did not skip used edges at all: when
+        // the best turn happened to be used, the walk aborted and every edge of
+        // that boundary stayed marked as consumed, so the ring (often a hole)
+        // was never emitted and its area silently disappeared.
+        if (used[candidate] && candidate !== start) continue;
         let turn = (directions[candidate] - reverse + 4) & 3;
         // Reversing along the twin is the last resort, as before.
         if (turn === 0) turn = 4;
@@ -192,7 +199,6 @@ export function extractContours(mask: Uint8Array, width: number, height: number)
         closed = true;
         break;
       }
-      if (used[chosen]) break;
       current = chosen;
     }
 

@@ -1,7 +1,7 @@
 {
   "name": "terrain-o",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Terrain / O — editor di mappe preliminari di orienteering da ortofoto georeferenziate, desktop Windows e web",
   "scripts": {
