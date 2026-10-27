@@ -3,13 +3,23 @@ name: Desktop release
 # A tag like v0.6.0 builds the Windows installer and attaches it to the GitHub
 # release. The asset is uploaded under the stable name Terrain-O-Setup.exe so the
 # download page can always link to /releases/latest/download/Terrain-O-Setup.exe.
+# Manual runs take the tag as an input, which also allows republishing an
+# existing release without moving the tag.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag da pubblicare (es. v0.6.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   installer:
@@ -18,28 +28,34 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run check
+      # --publish never: the release is published by the step below, not by
+      # electron-builder, which would otherwise look for a GH_TOKEN of its own.
       - name: Compila l'installer
-        run: npx electron-builder --win nsis --x64
+        run: npx electron-builder --win nsis --x64 --publish never
       - name: Verifica l'installer
         shell: pwsh
         run: |
-          $exe = "release/Terrain-O-Setup-$((Get-Content package.json | ConvertFrom-Json).version).exe"
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $exe = "release/Terrain-O-Setup-$version.exe"
           if (-not (Test-Path $exe)) { throw "Installer non trovato: $exe" }
           Copy-Item $exe "release/Terrain-O-Setup.exe" -Force
           Get-Item "release/Terrain-O-Setup.exe" | Select-Object Name, Length
       - name: Pubblica la release
         uses: softprops/action-gh-release@v2
         with:
-          name: Terrain / O ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Terrain / O ${{ env.RELEASE_TAG }}
           draft: false
           prerelease: false
-          generate_release_notes: true
+          body_path: docs/RELEASE-NOTES.md
           files: |
             release/Terrain-O-Setup.exe
       - name: Conserva l'installer come artefatto
