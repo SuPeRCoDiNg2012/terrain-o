@@ -21,7 +21,7 @@ const it: Record<string, string> = {
     'Terrain / O classifica la sorgente, vettorizza i confini, assegna i simboli ISOM e ISSprOM e produce bozze da verificare sul campo. Un programma desktop, non un servizio web.',
   'hero.download': 'Scarica per Windows',
   'hero.web': 'Prova nel browser',
-  'hero.meta': 'Versione 0.6.0 · installer .exe 64 bit · nessun account · funziona offline',
+  'hero.meta': 'Versione 0.7.0 · installer .exe 64 bit · nessun account · funziona offline',
   'hero.note':
     'L’interpretazione automatica è materiale sperimentale. Il programma non dichiara percorribilità, vegetazione sotto copertura, sicurezza del terreno, quota di precisione o conformità IOF.',
   'legend.title': 'Quattro provenienze, sempre distinte',
@@ -108,7 +108,7 @@ const en: Record<string, string> = {
     'Terrain / O classifies the source, vectorises boundaries, assigns ISOM and ISSprOM symbols and produces drafts to verify in the field. A desktop program, not a web service.',
   'hero.download': 'Download for Windows',
   'hero.web': 'Try in the browser',
-  'hero.meta': 'Version 0.6.0 · 64-bit .exe installer · no account · works offline',
+  'hero.meta': 'Version 0.7.0 · 64-bit .exe installer · no account · works offline',
   'hero.note':
     'Automatic interpretation is experimental material. The program never states runnability, vegetation under canopy, ground safety, precision elevation or IOF compliance.',
   'legend.title': 'Four provenances, always distinct',
