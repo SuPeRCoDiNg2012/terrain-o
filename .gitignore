@@ -10,3 +10,9 @@ test-results
 *.local
 .DS_Store
 /freebuff-sites-build/
+
+# desktop packaging output
+/release/
+dev-server.log
+screenshots/landing/
+screenshots/desktop/

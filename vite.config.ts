@@ -8,6 +8,14 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     chunkSizeWarningLimit: 1400,
+    rollupOptions: {
+      // The public site is the download page; the editor lives at /editor.html
+      // and is the entry the desktop wrapper loads.
+      input: {
+        landing: 'index.html',
+        editor: 'editor.html',
+      },
+    },
   },
   worker: {
     format: 'es',

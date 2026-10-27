@@ -17,6 +17,25 @@ The Italian edition is [README.md](README.md) and
 
 ---
 
+## Install (Windows)
+
+The installer is published in the GitHub releases:
+[Terrain-O-Setup.exe](https://github.com/SuPeRCoDiNg2012/terrain-o/releases/latest/download/Terrain-O-Setup.exe).
+It installs per user — no administrator rights — and creates the desktop and Start
+menu shortcuts.
+
+Requirements: 64-bit Windows 10 or 11, about 250 MB installed, 4 GB RAM recommended.
+No account and no server: images, classifications and projects stay in IndexedDB on
+the device, and the editor works offline (OSM and DEM need the network when you
+request them). Exports use the Windows save dialog.
+
+On first launch Windows may show a SmartScreen warning because the executable is not
+signed with a commercial certificate: **More information → Run anyway**.
+
+The same editor stays available in the browser at `/editor.html` on the site.
+
+---
+
 ## 1. Quick start
 
 Requirements: Node.js 20+ (22/24 recommended) and npm.
@@ -26,6 +45,8 @@ npm install
 npm run dev          # http://localhost:5173
 npm run build        # tsc --noEmit + Vite build into dist/
 npm run preview      # preview the production build
+npm run desktop:dev   # Vite + Electron window
+npm run desktop:build # Windows installer in release/
 ```
 
 Quality commands:
@@ -119,6 +140,9 @@ bar. The legend is opt-in (View → Legend) and off by default.
   provenance, autosave state, storage estimate.
 - Language switch **IT / EN** in the menu bar. Italian is the default; the choice
   is stored locally and applied to the document language.
+- Dark field theme by default, plus an optional **light theme** from **View → Light
+  theme**, persisted (`terrain-o/ui-theme/v1`) and applied before first paint. Both
+  themes pass WCAG AA contrast checks; ISOM map colours never change.
 - Phone/tablet layout with a drawer shell, a menu sheet and a bottom tool rail.
 
 ---

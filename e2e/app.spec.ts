@@ -10,7 +10,7 @@ async function openApp(page: Page) {
     localStorage.setItem('terrain-o/ui-mode/v1', 'advanced');
     if (!localStorage.getItem('terrain-o/locale/v1')) localStorage.setItem('terrain-o/locale/v1', 'it');
   });
-  await page.goto('/');
+  await page.goto('/editor.html');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 }
 
@@ -22,7 +22,7 @@ async function openEssential(page: Page) {
     localStorage.removeItem('terrain-o/ui-mode/v1');
     if (!localStorage.getItem('terrain-o/locale/v1')) localStorage.setItem('terrain-o/locale/v1', 'it');
   });
-  await page.goto('/');
+  await page.goto('/editor.html');
   await expect(page.getByTestId('simple-shell')).toBeVisible();
 }
 
@@ -102,6 +102,22 @@ test.describe('Terrain / O desktop shell', () => {
     await expect(page.getByText('?', { exact: true })).toHaveCount(0);
     // The legend is opt-in and must not be on the map by default.
     await expect(page.locator('.map-legend')).toHaveCount(0);
+  });
+
+  test('keeps the map surface flat in both themes', async ({ page }) => {
+    // The canvas must never fall back to a checkered transparency grid: a
+    // 22px checker read as fabric and flattened the map/panel hierarchy.
+    const surface = page.locator('.map-surface');
+    await expect(surface).toHaveCSS('background-image', 'none');
+
+    await page.getByRole('menuitem', { name: 'Visualizza', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Tema chiaro' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(surface).toHaveCSS('background-image', 'none');
+    await expect(page.locator('.stage-empty-card')).toBeVisible();
+
+    await page.reload();
+    await expect(surface).toHaveCSS('background-image', 'none');
   });
 
   test('opens every desktop menu, runs a command and supports keyboard navigation', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { LayerId } from '../../model/types';
 import { useProjectStore } from '../../store/projectStore';
 import { LAYER_DEFS } from '../../model/constants';
@@ -106,6 +107,7 @@ export function LayersPanel() {
                     max={100}
                     value={Math.round(layer.opacity * 100)}
                     onChange={(event) => setLayerOpacity(id, Number(event.target.value) / 100)}
+                    style={{ '--range-fill': `${Math.round(layer.opacity * 100)}%` } as CSSProperties}
                   />
                   <span className="mono tiny">{Math.round(layer.opacity * 100)}%</span>
                 </div>

@@ -3,17 +3,298 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#12161a" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="theme-color" content="#0b0e11" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <meta
       name="description"
-      content="Terrain / O — bozze preliminari di mappe di orienteering da ortofoto georeferenziate. Strumento di lavoro, non una mappa certificata IOF."
+      content="Terrain / O — editor desktop per mappe preliminari di orienteering da ortofoto georeferenziate. Classificazione per-pixel, vettorizzazione topologica, simboli ISOM e ISSprOM. Download per Windows."
     />
-    <title>Terrain / O — Bozza preliminare</title>
+    <title>Terrain / O — Editor desktop per mappe di orienteering</title>
   </head>
   <body>
-    <div id="root"></div>
-    <noscript>Terrain / O richiede JavaScript per funzionare.</noscript>
-    <script type="module" src="/src/main.tsx"></script>
+    <a class="skip-link" href="#main">Vai al contenuto</a>
+
+    <header class="masthead">
+      <div class="masthead-inner">
+        <a class="wordmark" href="./" aria-label="Terrain / O">
+          <span>TERRAIN</span><span class="wordmark-slash">/</span><span class="wordmark-o">O</span>
+        </a>
+        <nav class="site-nav" aria-label="Sezioni">
+          <a href="#programma" data-i18n="nav.program">Programma</a>
+          <a href="#limiti" data-i18n="nav.limits">Limiti</a>
+          <a href="#installazione" data-i18n="nav.install">Installazione</a>
+          <a href="https://github.com/SuPeRCoDiNg2012/terrain-o" rel="noopener">GitHub</a>
+        </nav>
+        <div class="masthead-meta">
+          <span class="version mono">v0.6.0</span>
+          <button class="lang-toggle" id="lang-toggle" type="button" aria-label="Switch to English">EN</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow" data-i18n="hero.eyebrow">Strumento da campo · Windows 10/11</p>
+          <h1 data-i18n="hero.title">Mappe di orienteering preliminari, da un’ortofoto.</h1>
+          <p class="lead" data-i18n="hero.lead">
+            Terrain / O classifica la sorgente, vettorizza i confini, assegna i simboli ISOM e
+            ISSprOM e produce bozze da verificare sul campo. Un programma desktop, non un servizio
+            web.
+          </p>
+          <div class="actions">
+            <a
+              class="btn btn-primary"
+              id="download"
+              href="https://github.com/SuPeRCoDiNg2012/terrain-o/releases/latest/download/Terrain-O-Setup.exe"
+              ><span data-i18n="hero.download">Scarica per Windows</span></a
+            >
+            <a class="btn btn-ghost" href="./editor.html" data-i18n="hero.web"
+              >Prova nel browser</a
+            >
+          </div>
+          <p class="meta" data-i18n="hero.meta">
+            Versione 0.6.0 · installer .exe 64 bit · nessun account · funziona offline
+          </p>
+          <p class="note" data-i18n="hero.note">
+            L’interpretazione automatica è materiale sperimentale. Il programma non dichiara
+            percorribilità, vegetazione sotto copertura, sicurezza del terreno, quota di precisione
+            o conformità IOF.
+          </p>
+        </div>
+
+        <aside class="legend" aria-labelledby="legend-title">
+          <p class="card-kicker" id="legend-title" data-i18n="legend.title">
+            Quattro provenienze, sempre distinte
+          </p>
+          <ul class="legend-list">
+            <li>
+              <span class="swatch swatch-source" aria-hidden="true"></span>
+              <span class="legend-copy">
+                <strong data-i18n="legend.source">Sorgente</strong>
+                <small data-i18n="legend.sourceHint">Ortofoto non modificabile</small>
+              </span>
+            </li>
+            <li>
+              <span class="swatch swatch-auto" aria-hidden="true"></span>
+              <span class="legend-copy">
+                <strong data-i18n="legend.auto">Automatica</strong>
+                <small data-i18n="legend.autoHint">Bordo tratteggiato · sperimentale</small>
+              </span>
+            </li>
+            <li>
+              <span class="swatch swatch-manual" aria-hidden="true"></span>
+              <span class="legend-copy">
+                <strong data-i18n="legend.manual">Manuale</strong>
+                <small data-i18n="legend.manualHint">Bordo pieno · non verificata</small>
+              </span>
+            </li>
+            <li>
+              <span class="swatch swatch-verified" aria-hidden="true">
+                <svg viewBox="0 0 12 12" width="9" height="9" fill="none" aria-hidden="true">
+                  <path d="M2 6.4 4.6 9 10 3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="legend-copy">
+                <strong data-i18n="legend.verified">Verificata</strong>
+                <small data-i18n="legend.verifiedHint">Dichiarazione esplicita</small>
+              </span>
+            </li>
+          </ul>
+          <p class="legend-foot" data-i18n="legend.foot">
+            Modificare la geometria revoca la verifica.
+          </p>
+        </aside>
+      </section>
+
+      <section class="pipeline" aria-label="Flusso di lavoro">
+        <span data-i18n="pipeline.source">Ortofoto</span>
+        <i aria-hidden="true">→</i>
+        <span data-i18n="pipeline.classify">Classificazione</span>
+        <i aria-hidden="true">→</i>
+        <span data-i18n="pipeline.vectorize">Vettorizzazione</span>
+        <i aria-hidden="true">→</i>
+        <span data-i18n="pipeline.symbols">Simboli ISOM</span>
+        <i aria-hidden="true">→</i>
+        <span data-i18n="pipeline.export">Export</span>
+      </section>
+
+      <section id="programma" class="section">
+        <header class="section-head">
+          <p class="kicker" data-i18n="program.kicker">Il programma</p>
+          <h2 data-i18n="program.title">Quattro passaggi, un solo strumento.</h2>
+        </header>
+        <div class="cards">
+          <article class="card">
+            <p class="card-kicker mono">01</p>
+            <h3 data-i18n="program.c1.title">Classificazione per-pixel</h3>
+            <p data-i18n="program.c1.body">
+              Illuminazione normalizzata, superpixel SLIC, regole per classe e confidenza su ogni
+              pixel. Pulizia morfologica e gerarchia ISOM: vegetazione, suolo, acqua, costruiti.
+            </p>
+          </article>
+          <article class="card">
+            <p class="card-kicker mono">02</p>
+            <h3 data-i18n="program.c2.title">Vettorizzazione topologica</h3>
+            <p data-i18n="program.c2.body">
+              Contorni marching squares, isole e fori annidati, semplificazione controllata con
+              verifiche di topologia e riconciliazione dei bordi adiacenti. Nessun anello aperto.
+            </p>
+          </article>
+          <article class="card">
+            <p class="card-kicker mono">03</p>
+            <h3 data-i18n="program.c3.title">Simboli ISOM e ISSprOM</h3>
+            <p data-i18n="program.c3.body">
+              Set simboli ISOM 2017-2 e ISSprOM 2019-2, con priorità gerarchica fra le classi.
+              Esportazione .omap compatibile con OpenOrienteering Mapper.
+            </p>
+          </article>
+          <article class="card">
+            <p class="card-kicker mono">04</p>
+            <h3 data-i18n="program.c4.title">Export verificabile</h3>
+            <p data-i18n="program.c4.body">
+              PNG, SVG, PDF A4 e A3, GeoJSON, GPX/KML e .omap. Ogni file porta con sé
+              l’avvertenza di bozza preliminare e le attribuzioni OSM e DEM.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="limiti" class="section limits">
+        <header class="section-head">
+          <p class="kicker" data-i18n="limits.kicker">Limiti dichiarati</p>
+          <h2 data-i18n="limits.title">Quello che il programma non dice.</h2>
+        </header>
+        <div class="limits-grid">
+          <div>
+            <h3 data-i18n="limits.never">Non dichiara mai</h3>
+            <ul class="check-list">
+              <li data-i18n="limits.never1">Percorribilità o velocità di corsa</li>
+              <li data-i18n="limits.never2">Vegetazione sotto copertura</li>
+              <li data-i18n="limits.never3">Sicurezza del terreno</li>
+              <li data-i18n="limits.never4">Quota di precisione</li>
+              <li data-i18n="limits.never5">Ostacoli non visibili</li>
+              <li data-i18n="limits.never6">Nord geografico verificato</li>
+              <li data-i18n="limits.never7">Conformità IOF</li>
+            </ul>
+          </div>
+          <div>
+            <h3 data-i18n="limits.you">Lo dichiari tu</h3>
+            <p data-i18n="limits.youBody">
+              Un elemento diventa verificato solo con una dichiarazione esplicita dell’utente.
+              Ogni modifica geometrica revoca la verifica e conserva la nota nello storico, con
+              data e motivo.
+            </p>
+            <p class="note" data-i18n="limits.youNote">
+              La classificazione automatica resta materia prima sperimentale: è marcata come tale
+              nell’interfaccia e non diventa verità sul terreno.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="installazione" class="section install">
+        <header class="section-head">
+          <p class="kicker" data-i18n="install.kicker">Installazione</p>
+          <h2 data-i18n="install.title">Un installer, nessuna dipendenza.</h2>
+        </header>
+        <ol class="steps">
+          <li>
+            <strong data-i18n="install.s1.title">Scarica l’installer</strong>
+            <span data-i18n="install.s1.body"
+              >Il pulsante apre l’ultima release su GitHub: file .exe per Windows 64 bit.</span
+            >
+          </li>
+          <li>
+            <strong data-i18n="install.s2.title">Esegui il setup</strong>
+            <span data-i18n="install.s2.body"
+              >Installazione per utente, senza privilegi di amministratore. Crea il collegamento
+              sul desktop e nel menu Start.</span
+            >
+          </li>
+          <li>
+            <strong data-i18n="install.s3.title">Apri Terrain / O</strong>
+            <span data-i18n="install.s3.body"
+              >Nessun account. I progetti restano in IndexedDB sul dispositivo e l’editor funziona
+              senza connessione.</span
+            >
+          </li>
+        </ol>
+
+        <div class="callout">
+          <p class="callout-title" data-i18n="install.smart.title">Avviso di Windows</p>
+          <p data-i18n="install.smart.body">
+            L’installer non è firmato con un certificato commerciale: al primo avvio Windows può
+            mostrare “Windows ha protetto il PC”. Seleziona Ulteriori informazioni → Esegui
+            comunque. La firma del codice è il passo successivo per la distribuzione pubblica.
+          </p>
+        </div>
+
+        <dl class="requirements">
+          <div>
+            <dt data-i18n="install.req.os">Sistema</dt>
+            <dd data-i18n="install.req.osValue">Windows 10 o 11, 64 bit</dd>
+          </div>
+          <div>
+            <dt data-i18n="install.req.disk">Spazio</dt>
+            <dd data-i18n="install.req.diskValue">circa 250 MB installati</dd>
+          </div>
+          <div>
+            <dt data-i18n="install.req.memory">Memoria</dt>
+            <dd data-i18n="install.req.memoryValue">4 GB RAM consigliati</dd>
+          </div>
+          <div>
+            <dt data-i18n="install.req.net">Rete</dt>
+            <dd data-i18n="install.req.netValue">non richiesta, salvo OSM e DEM</dd>
+          </div>
+        </dl>
+
+        <div class="actions actions-bottom">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/SuPeRCoDiNg2012/terrain-o/releases/latest/download/Terrain-O-Setup.exe"
+            ><span data-i18n="hero.download">Scarica per Windows</span></a
+          >
+          <a
+            class="btn btn-ghost"
+            href="https://github.com/SuPeRCoDiNg2012/terrain-o/releases"
+            rel="noopener"
+            data-i18n="install.allReleases"
+            >Tutte le release</a
+          >
+          <a
+            class="btn btn-ghost"
+            href="https://github.com/SuPeRCoDiNg2012/terrain-o/blob/main/docs/Terrain-O-Manuale.pdf"
+            rel="noopener"
+            data-i18n="install.manual"
+            >Manuale PDF</a
+          >
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div>
+          <p class="footer-mark">TERRAIN <span class="wordmark-slash">/</span> O</p>
+          <p class="footer-note" data-i18n="footer.note">
+            Bozza preliminare. Non è uno strumento di validazione IOF, non certifica la sicurezza
+            del terreno e non sostituisce la verifica sul campo.
+          </p>
+        </div>
+        <nav class="footer-nav" aria-label="Collegamenti">
+          <a href="https://github.com/SuPeRCoDiNg2012/terrain-o" rel="noopener"
+            data-i18n="footer.source">Codice sorgente</a
+          >
+          <a href="https://github.com/SuPeRCoDiNg2012/terrain-o/releases" rel="noopener"
+            data-i18n="footer.releases">Release</a
+          >
+          <a href="./editor.html" data-i18n="footer.web">Editor nel browser</a>
+          <span class="mono">v0.6.0</span>
+        </nav>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/landing/main.ts"></script>
   </body>
 </html>

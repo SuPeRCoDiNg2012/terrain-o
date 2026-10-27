@@ -10,7 +10,7 @@ async function openApp(page: Page) {
     localStorage.setItem('terrain-o/locale/v1', 'it');
     localStorage.setItem('terrain-o/ui-mode/v1', 'advanced');
   });
-  await page.goto('/');
+  await page.goto('/editor.html');
   await expect(page.getByTestId('app-shell')).toBeVisible();
 }
 
@@ -37,7 +37,7 @@ test.describe('WCAG AA in the desktop shell', () => {
       localStorage.setItem('terrain-o:onboarding-v1', 'seen');
       localStorage.setItem('terrain-o/locale/v1', 'it');
     });
-    await page.goto('/');
+    await page.goto('/editor.html');
     await expect(page.getByTestId('simple-shell')).toBeVisible();
     expect(await violations(page), 'essential shell').toEqual([]);
   });
@@ -73,5 +73,52 @@ test.describe('WCAG AA in the desktop shell', () => {
     await page.locator('.menu-icon-button[aria-label="Esporta"]').click();
     await expect(page.getByTestId('export-omap')).toBeVisible();
     expect(await violations(page), 'export dialog').toEqual([]);
+  });
+
+  test('the light theme keeps AA on the shell, panels and dialogs', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('terrain-o/ui-theme/v1', 'light');
+    });
+    await openApp(page);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    expect(await violations(page), 'light empty shell').toEqual([]);
+
+    await importFixture(page);
+
+    for (const tab of ['Elementi', 'Proprietà', 'Classificazione', 'Vettoriz.', 'AI', 'Storia', 'Info', 'OSM', 'Percorso']) {
+      await page.getByRole('tab', { name: tab, exact: true }).first().click();
+      expect(await violations(page), `light panel ${tab}`).toEqual([]);
+    }
+
+    await page.locator('.menu-icon-button[aria-label="Esporta"]').click();
+    await expect(page.getByTestId('export-omap')).toBeVisible();
+    expect(await violations(page), 'light export dialog').toEqual([]);
+    await page.getByRole('button', { name: 'Chiudi' }).first().click();
+
+    await page.locator('.menu-icon-button[aria-label="Aiuto"]').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(await violations(page), 'light help dialog').toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+
+    // The Visualizza command must switch both ways and repaint the shell.
+    await page.getByRole('menuitem', { name: 'Visualizza' }).click();
+    await page.getByRole('menuitem', { name: 'Tema scuro' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    expect(await violations(page), 'dark after toggle').toEqual([]);
+
+    await page.getByRole('menuitem', { name: 'Visualizza' }).click();
+    await page.getByRole('menuitem', { name: 'Tema chiaro' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+    // The essential workspace shares the same tokens and must stay readable.
+    await page.getByTestId('enter-essential').click();
+    await page.getByTestId('simple-shell').waitFor();
+    expect(await violations(page), 'light essential shell').toEqual([]);
+
+    // The saved theme is applied before React mounts, so a reload never
+    // flashes the dark shell first.
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   });
 });

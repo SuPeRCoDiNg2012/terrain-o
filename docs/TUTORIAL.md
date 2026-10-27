@@ -1,6 +1,6 @@
 # Terrain / O — Manuale completo
 
-**Versione 0.5.0 · Bozza preliminare**
+**Versione 0.6.0 · Bozza preliminare**
 
 English edition: [TUTORIAL.en.md](TUTORIAL.en.md).
 
@@ -99,6 +99,30 @@ dei worker e la memoria disponibile possono essere inferiori.
 
 ## 2. Installazione e comandi
 
+### Programma desktop (Windows)
+
+L'installer è pubblicato nelle release GitHub del progetto (`Terrain-O-Setup.exe`).
+L'installazione è per utente, non richiede privilegi di amministratore e crea i
+collegamenti sul desktop e nel menu Start.
+
+1. scaricare l'installer dall'ultima release;
+2. eseguirlo e seguire il setup;
+3. aprire **Terrain / O** dal collegamento creato.
+
+Al primo avvio Windows può mostrare l'avviso SmartScreen, perché l'eseguibile non è
+firmato con un certificato commerciale: **Ulteriori informazioni → Esegui comunque**.
+Il programma desktop è lo stesso editor del browser, servito in locale da un'origine
+`app://`: i progetti restano in IndexedDB, senza server e senza account. Gli export
+usano la finestra di salvataggio di Windows. Non servono Node.js né una connessione;
+OSM e DEM richiedono rete quando li si richiede.
+
+Per costruire l'installer in locale:
+
+```bash
+npm run desktop:dev    # Vite + finestra Electron
+npm run desktop:build  # build + installer in release/
+```
+
 ### 2.1 Requisiti
 
 - Node.js 20 o superiore (consigliati 22/24).
@@ -141,6 +165,8 @@ npm run preview
 | `npx playwright install chromium` | installa il browser per gli E2E |
 | `npx playwright test` | 19 test end-to-end: modalità essenziale, desktop, mobile, AI, OSM simulato, elaborazione automatica, standard ISOM/ISSprOM e WCAG AA |
 | `npm run check` | lint, typecheck, test e build in sequenza |
+| `npm run desktop:dev` | avvia Vite e la finestra Electron |
+| `npm run desktop:build` | build e installer Windows in `release/` |
 
 ### 2.6 Manuale PDF
 
@@ -274,6 +300,7 @@ a destra, il nome del progetto e le icone Importa, Esporta, Aiuto.
 | Legenda | — | mostra/nasconde la legenda (spenta di default) |
 | Minimappa | — | mostra/nasconde la minimappa sulla mappa |
 | Mirino | — | mostra/nasconde il crosshair |
+| Tema scuro / Tema chiaro | — | cambia il tema dell'interfaccia; la scelta è persistita |
 | Pannello … | — | apre o porta in primo piano il pannello indicato |
 | Reimposta layout pannelli | — | ripristina il layout di fabbrica |
 
@@ -671,6 +698,20 @@ passo.
 **Visualizza → Mirino** mostra un crosshair a tutto canvas. **Visualizza → Legenda**
 mostra un riquadro discreto in un angolo con aree, linee, punti, classi e stile di
 provenienza. La legenda è spenta per default.
+
+### 9.5 Tema chiaro e scuro
+
+Il tema predefinito è quello scuro, pensato per lavorare con la mappa come unica
+superficie luminosa. **Visualizza → Tema chiaro** passa a una scrivania carta
+(canvas grigio chiaro, pannelli quasi bianchi, testo inchiostro) per la stampa, il
+lavoro in luce diurna o la condivisione dello schermo: la mappa resta la
+superficie più profonda e la cornice non la sovrasta. **Visualizza → Tema scuro** torna
+al tema di campo. La scelta è salvata in `localStorage`
+(`terrain-o/ui-theme/v1`) e viene applicata prima del primo paint, senza lampo
+bianco all'avvio. La mappa mantiene gli stessi colori ISOM in entrambi i temi:
+cambia solo la cornice, non il significato cartografico. Entrambi i temi sono
+verificati WCAG AA (contrasto testo, icone e controlli) dai test Playwright con
+axe.
 
 ---
 

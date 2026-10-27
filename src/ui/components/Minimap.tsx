@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { get2d } from '../../render/canvas';
 import { useUiStore } from '../uiStore';
+import { useThemeStore } from '../themeStore';
 import { useT } from '../../i18n';
 import { Icon } from './Icon';
 
@@ -17,6 +18,9 @@ export function Minimap({ onClose }: { onClose?: () => void }) {
   const setView = useProjectStore((state) => state.setView);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const setCursor = useUiStore((state) => state.setCursor);
+  // The minimap samples theme colours from the DOM when it draws, so it must
+  // repaint when the theme changes and not only when the view moves.
+  const theme = useThemeStore((state) => state.theme);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -26,7 +30,13 @@ export function Minimap({ onClose }: { onClose?: () => void }) {
     const ctx = get2d(canvas);
     ctx.setTransform(2, 0, 0, 2, 0, 0);
     ctx.clearRect(0, 0, MAP_W, MAP_H);
-    ctx.fillStyle = '#d9d4c7';
+    // Il fondo della minimappa segue il tema: la vecchia carta beige era
+    // l'ultima tinta fuori palette rimasta nell'interfaccia.
+    const tokens = getComputedStyle(document.documentElement);
+    const canvasColor = tokens.getPropertyValue('--surface-canvas').trim() || '#11171d';
+    const accent = tokens.getPropertyValue('--map-accent').trim() || '#6cbde9';
+    const accentFill = tokens.getPropertyValue('--map-accent-fill').trim() || 'rgba(108,189,233,0.12)';
+    ctx.fillStyle = canvasColor;
     ctx.fillRect(0, 0, MAP_W, MAP_H);
     const scale = Math.min(MAP_W / project.image.width, MAP_H / project.image.height);
     const offsetX = (MAP_W - project.image.width * scale) / 2;
@@ -36,10 +46,10 @@ export function Minimap({ onClose }: { onClose?: () => void }) {
     ctx.scale(scale, scale);
     if (sourceImage) ctx.drawImage(sourceImage, 0, 0, project.image.width, project.image.height);
     else {
-      ctx.fillStyle = '#d9d4c7';
+      ctx.fillStyle = canvasColor;
       ctx.fillRect(0, 0, project.image.width, project.image.height);
     }
-    ctx.strokeStyle = '#0ea5e9';
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 1.5 / scale;
     const viewWorld = {
       x: -view.tx / view.scale,
@@ -48,10 +58,10 @@ export function Minimap({ onClose }: { onClose?: () => void }) {
       h: viewport.height / view.scale,
     };
     ctx.strokeRect(viewWorld.x, viewWorld.y, viewWorld.w, viewWorld.h);
-    ctx.fillStyle = 'rgba(14,165,233,0.12)';
+    ctx.fillStyle = accentFill;
     ctx.fillRect(viewWorld.x, viewWorld.y, viewWorld.w, viewWorld.h);
     ctx.restore();
-  }, [project.image, project.layerOrder, sourceImage, view, viewport]);
+  }, [project.image, project.layerOrder, sourceImage, view, viewport, theme]);
 
   if (!project.image) return null;
 

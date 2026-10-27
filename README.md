@@ -17,6 +17,25 @@ dei menu.
 
 ---
 
+## Installazione (Windows)
+
+L'installer è pubblicato nelle release GitHub:
+[Terrain-O-Setup.exe](https://github.com/SuPeRCoDiNg2012/terrain-o/releases/latest/download/Terrain-O-Setup.exe).
+L'installazione è per utente — nessun privilegio di amministratore — e crea i
+collegamenti sul desktop e nel menu Start.
+
+Requisiti: Windows 10 o 11 a 64 bit, circa 250 MB installati, 4 GB di RAM consigliati.
+Nessun account e nessun server: immagini, classificazioni e progetti restano in
+IndexedDB sul dispositivo, e l'editor funziona senza connessione (OSM e DEM richiedono
+rete quando li si richiede). Gli export usano la finestra di salvataggio di Windows.
+
+Al primo avvio Windows può mostrare l'avviso SmartScreen perché l'eseguibile non è
+firmato con un certificato commerciale: **Ulteriori informazioni → Esegui comunque**.
+
+Lo stesso editor resta disponibile nel browser all'indirizzo `/editor.html` del sito.
+
+---
+
 ## 1. Avvio rapido
 
 Requisiti: Node.js 20+ (consigliato 22/24) e npm.
@@ -26,6 +45,8 @@ npm install
 npm run dev          # http://localhost:5173
 npm run build        # tsc --noEmit + build Vite in dist/
 npm run preview      # anteprima del build
+npm run desktop:dev   # Vite + finestra Electron
+npm run desktop:build # installer Windows in release/
 ```
 
 Comandi di qualità:
@@ -34,7 +55,7 @@ Comandi di qualità:
 npm run typecheck
 npm run lint
 npm test             # Vitest, 120 test
-npx playwright test  # 19 test end-to-end (essenziale + desktop + mobile + lingua + AI + auto + OSM + simboli + WCAG AA)
+npx playwright test  # test end-to-end (essenziale + desktop + mobile + lingua + AI + auto + OSM + simboli + landing + WCAG AA)
 npm run check        # lint + typecheck + test + build
 ```
 
@@ -56,7 +77,10 @@ I browser Playwright vanno installati una volta con `npx playwright install chro
   Proprietà, Classificazione, Vettorizzazione, Riconoscimento AI, Storia, Info, Navigatore.
 - Layout persistito in `localStorage` (`terrain-o/ui-layout/v1`) e ripristinabile da
   **Visualizza → Reimposta layout pannelli**.
-- Tema scuro coerente, density compatta, font tabellare per coordinate e valori.
+- Tema scuro predefinito e **tema chiaro opzionale** da **Visualizza → Tema chiaro**,
+  persistito in `localStorage` (`terrain-o/ui-theme/v1`) e applicato prima del primo
+  paint; entrambi i temi sono verificati WCAG AA da Playwright + axe. Density
+  compatta, font tabellare per coordinate e valori, colori ISOM invariati sulla mappa.
 - Zoom fluido, pan, righelli px/m/gradi, griglia, snap, mirino, legenda opzionale
   (spenta per default), minimappa.
 - **Versione mobile/tablet automatica** (`src/ui/useDevice.ts`): sotto 900 px il menu diventa

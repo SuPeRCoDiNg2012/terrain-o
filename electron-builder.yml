@@ -1,0 +1,39 @@
+appId: it.terraino.editor
+productName: Terrain O
+copyright: Terrain / O — bozza preliminare
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built renderer and the Electron entry point ship: no sources, no
+# tests, no development dependencies.
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+
+asar: true
+compression: normal
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+  artifactName: Terrain-O-Setup-${version}.exe
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Terrain O
+  uninstallDisplayName: Terrain / O ${version}
+  deleteAppDataOnUninstall: false
+  installerLanguages:
+    - it_IT
+    - en_US
+  language: 1033

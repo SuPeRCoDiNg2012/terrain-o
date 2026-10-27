@@ -154,6 +154,213 @@
   --paper-ink: var(--text-primary);
   --paper-muted: var(--text-muted);
   --paper-border: var(--border-default);
+
+  /* === Ruoli di superficie ===
+     Le regole di shell.css non usano tutte i token semantici: molte tinte
+     erano letterali. Questi ruoli le nominano una volta, così il tema chiaro
+     cambia i valori senza duplicare i selettori. */
+  --surface-canvas: #0e141a;
+  --surface-canvas-alt: #11171d;
+  --surface-1: #141c24;
+  --surface-2: #1a242e;
+  --surface-3: #1d2731;
+  --surface-hover: #24303c;
+  --surface-hover-strong: #2b3a48;
+  --surface-track: #232f3a;
+  /* Superfici elevate: menu, toast, tab attiva. Il tema chiaro le schiarisce
+     invece di scurirle, perché là l'elevazione si legge con la luce. */
+  --floating-bg: var(--surface-2);
+  --floating-border: var(--edge);
+  --tab-active-bg: var(--surface-3);
+  --field-bg: #111821;
+  --code-bg: #10171e;
+  --border-soft: #26313c;
+  --border-strong: #3a4855;
+  --text-disabled: #66727f;
+  --switch-thumb: #cfd9e2;
+  --scrollbar-thumb: #384552;
+
+  --overlay-bg: rgba(20, 28, 36, 0.92);
+  --overlay-bg-strong: rgba(20, 28, 36, 0.95);
+  --overlay-faint: rgba(15, 21, 27, 0.72);
+  --overlay-raised: rgba(35, 48, 60, 0.96);
+  --scrim: rgba(4, 8, 12, 0.68);
+  --scrim-light: rgba(4, 8, 12, 0.48);
+  --hover-overlay: rgba(255, 255, 255, 0.06);
+  --focus-halo: rgba(228, 86, 42, 0.22);
+  --resizer-active: rgba(228, 86, 42, 0.35);
+
+  /* Tinte funzionali: significati, non decorazione. */
+  --tint-info-bg: #17242e;
+  --tint-info-border: #2b3e4c;
+  --tint-info-text: #b9cedb;
+  --tint-warning-bg: #2f2718;
+  --tint-warning-border: #4b3c22;
+  --tint-warning-text: #e4c38d;
+  --tint-danger-bg: #2a1d1c;
+  --tint-danger-border: #4c2f2c;
+  --tint-danger-text: #e9b1aa;
+  --tint-success-bg: #1b2f25;
+  --tint-success-border: #2b4738;
+  --tint-success-text: #a9d9bf;
+  --tint-auto-bg: #2a2540;
+  --tint-auto-border: #403865;
+  --tint-auto-text: #c0b3f0;
+  --badge-neutral-bg: #242f3a;
+  --badge-neutral-border: #36434f;
+  --badge-neutral-text: #b6c3cf;
+
+  --status-idle: #5d7a68;
+  --status-saving: #d3a259;
+  --status-error: #df766a;
+  --status-saved: #66c193;
+  --history-dot: #4c5a68;
+  --source-manual: #e3b567;
+  --source-vector: #b9acef;
+  --danger-solid: #b3453a;
+  --danger-solid-hover: #9a382f;
+  --brand-mark: #9ed3b6;
+  --ruler-cursor: #d9a441;
+
+  /* Segni sovrapposti alla mappa: seguono il tema per restare leggibili
+     su un canvas chiaro, senza mai sostituire i colori ISOM dei simboli. */
+  --map-accent: #6cbde9;
+  --map-accent-fill: rgba(74, 163, 216, 0.12);
+  --map-vector: #5dc7a6;
+  --map-vector-fill: rgba(88, 197, 160, 0.14);
+  --map-grid: rgba(200, 220, 240, 0.075);
+  --map-crosshair: rgba(220, 235, 250, 0.28);
+}
+
+/* ==========================================================================
+   Tema chiaro — la stessa rampa ink letta per ruolo, non invertita a caso.
+   Il canvas torna bianco, i pannelli grigio carta, il testo inchiostro.
+   L'accento resta --signal-500, scurito quanto basta per il contrasto AA su
+   superfici chiare (5.6:1 sul bianco, 5.0:1 su --ink-700).
+   ========================================================================== */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --ink-900: #ffffff;
+  --ink-800: #f6f7f9;
+  --ink-700: #eef0f3;
+  --ink-600: #e4e8ee;
+  --ink-500: #d2d8e0;
+  --ink-400: #bcc4ce;
+  --ink-300: #616a76;
+  --ink-200: #4d5663;
+  --ink-100: #2b323b;
+  --ink-000: #12161a;
+
+  --signal-500: #b3441d;
+  --signal-600: #8f3514;
+  --signal-400: #a23c15;
+  --signal-100: #fbe9e2;
+
+  --info-500: #1f6390;
+  --info-100: #e8f2f8;
+
+  --bg-app: var(--ink-800);
+  --bg-panel: var(--ink-700);
+  --bg-panel-elevated: var(--ink-600);
+  --bg-canvas: var(--ink-900);
+  --border-default: var(--ink-500);
+  --border-subtle: var(--ink-400);
+  --text-primary: var(--ink-100);
+  --text-secondary: var(--ink-200);
+  --text-muted: var(--ink-300);
+  --text-heading: var(--ink-000);
+
+  --provenance-auto-stroke: var(--ink-300);
+  --provenance-manual-stroke: var(--ink-200);
+  --provenance-verified-stroke: var(--signal-500);
+
+  --shadow-sm: 0 1px 0 var(--ink-400);
+  --shadow-md: 0 1px 0 var(--ink-400);
+  --shadow-lg: 0 1px 0 var(--ink-400);
+
+  --ochre: #8a5a12;
+  --warning: #7a5200;
+  --warning-soft: #fdf3dc;
+  --danger: #a8342c;
+  --danger-soft: #fbe9e7;
+
+  /* Il canvas resta più profondo dei pannelli, come nello scuro: la mappa è
+     l'eroe, la cornice non deve brillare più di lei. */
+  --surface-canvas: #e6eaef;
+  --surface-canvas-alt: #e2e7ed;
+  --surface-1: #ffffff;
+  --surface-2: #f7f9fb;
+  --surface-3: #eef2f6;
+  --surface-hover: #e6ebf1;
+  --surface-hover-strong: #d7dee7;
+  --surface-track: #c9d3de;
+  --field-bg: #ffffff;
+  --code-bg: #f3f5f8;
+  /* Hairline con lo stesso peso percepito del tema scuro: a #d9dfe6 i
+     separatori sparivano su fondo carta. */
+  --border-soft: #cfd7e0;
+  --border-strong: #b4bfca;
+  --floating-bg: #ffffff;
+  --floating-border: var(--border-strong);
+  --tab-active-bg: #ffffff;
+  --text-disabled: #6b7480;
+  --switch-thumb: #ffffff;
+  --scrollbar-thumb: #c3ccd6;
+
+  --overlay-bg: rgba(255, 255, 255, 0.92);
+  --overlay-bg-strong: rgba(255, 255, 255, 0.96);
+  --overlay-faint: rgba(255, 255, 255, 0.8);
+  --overlay-raised: rgba(255, 255, 255, 0.96);
+  --scrim: rgba(18, 24, 30, 0.34);
+  --scrim-light: rgba(18, 24, 30, 0.22);
+  --hover-overlay: rgba(18, 26, 34, 0.06);
+  --focus-halo: rgba(179, 68, 29, 0.2);
+  --resizer-active: rgba(179, 68, 29, 0.35);
+
+  --tint-info-bg: #e8f2f8;
+  --tint-info-border: #bcd5e6;
+  --tint-info-text: #1a5276;
+  --tint-warning-bg: #fdf3dc;
+  --tint-warning-border: #e8d3a4;
+  --tint-warning-text: #6b4700;
+  --tint-danger-bg: #fbe9e7;
+  --tint-danger-border: #ecc4bf;
+  --tint-danger-text: #8f2b24;
+  --tint-success-bg: #eaf6ef;
+  --tint-success-border: #bfe0cc;
+  --tint-success-text: #1f6b43;
+  --tint-auto-bg: #f0ecfd;
+  --tint-auto-border: #d3c8f5;
+  --tint-auto-text: #4a3a9e;
+  --badge-neutral-bg: #eef1f5;
+  --badge-neutral-border: #d5dce4;
+  --badge-neutral-text: #4d5663;
+
+  --status-idle: #8a939e;
+  --status-saving: #a8741a;
+  --status-error: #b0372e;
+  --status-saved: #1f7a4d;
+  --history-dot: #98a1ac;
+  --source-manual: #8a5a12;
+  --source-vector: #5540a8;
+  --danger-solid: #a8342c;
+  --danger-solid-hover: #8c2a23;
+  --brand-mark: #2f7d4f;
+  --ruler-cursor: #a8741a;
+
+  /* Le superfici galleggianti devono staccarsi dal canvas, non solo dal
+     pannello: nello scuro basta la tinta, nel chiaro serve luce. */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 32, 0.08);
+  --shadow-md: 0 6px 18px -8px rgba(16, 24, 32, 0.3), 0 1px 2px rgba(16, 24, 32, 0.07);
+  --shadow-lg: 0 16px 40px -14px rgba(16, 24, 32, 0.34), 0 1px 3px rgba(16, 24, 32, 0.08);
+
+  --map-accent: #1f6f9c;
+  --map-accent-fill: rgba(31, 111, 156, 0.1);
+  --map-vector: #157a5a;
+  --map-vector-fill: rgba(21, 122, 90, 0.12);
+  --map-grid: rgba(20, 40, 60, 0.1);
+  --map-crosshair: rgba(40, 60, 80, 0.35);
 }
 
 /* === Tipografia di base ============================================== */

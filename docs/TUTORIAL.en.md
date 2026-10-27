@@ -1,6 +1,6 @@
 # Terrain / O — Complete manual (English edition)
 
-**Version 0.5.0 · Preliminary draft**
+**Version 0.6.0 · Preliminary draft**
 
 This manual documents every menu, tool, panel, shortcut and export. Read it end
 to end or keep it open as a reference while working.
@@ -62,6 +62,30 @@ Properties and once in the status bar. There is no question-mark marker and no
 permanent warning banner over the map.
 
 ## 2. Installation and commands
+
+### Desktop program (Windows)
+
+The installer is published in the project's GitHub releases (`Terrain-O-Setup.exe`).
+It installs per user, needs no administrator rights and creates the desktop and
+Start menu shortcuts.
+
+1. download the installer from the latest release;
+2. run it and follow the setup;
+3. open **Terrain / O** from the shortcut.
+
+On first launch Windows may show a SmartScreen warning because the executable is not
+signed with a commercial certificate: **More information → Run anyway**. The desktop
+program is the same editor as the browser build, served locally from an `app://`
+origin: projects stay in IndexedDB, with no server and no account. Exports use the
+Windows save dialog. Node.js and a connection are not required; OSM and DEM need the
+network when you request them.
+
+Build the installer locally:
+
+```bash
+npm run desktop:dev    # Vite + Electron window
+npm run desktop:build  # build + installer in release/
+```
 
 ```bash
 npm install
@@ -472,11 +496,19 @@ the reference; English copy covers the shell, first-run flow and core panels,
 with the remaining specialist panels being translated progressively. The
 manuals exist in both languages (this file and `TUTORIAL.md`).
 
-The theme is a compact dark graphite interface with a single blue interaction
-accent; green is reserved for the brand, verified state and success. Interface
-font: IBM Plex Sans/Mono (self-hosted); icons: Lucide (line, stroke 1.5px);
-coordinates use tabular figures. Contrast targets WCAG AA, focus rings are
-visible, tooltips include shortcuts and reduced-motion preferences are honored.
+The interface is a compact graphite instrument with a single warm signal accent
+(reserved for the chrome, never used as a map symbol). Dark is the default theme
+for field work; **View → Light theme** switches to a paper desk (light grey
+canvas, off-white panels, ink text) for printing, daylight or screen sharing, so
+the map stays the deepest surface and the chrome never outshines it; **View →
+Dark theme** returns to the field theme. The choice is stored in `localStorage`
+(`terrain-o/ui-theme/v1`) and applied before the first paint, so the dark shell
+never flashes white on load. ISOM map colours are identical in both themes: only
+the frame changes, never the cartographic meaning. Both themes are checked for
+WCAG AA contrast by the Playwright/axe suite. Interface font: IBM Plex Sans/Mono
+(self-hosted); icons: Lucide (line, stroke 1.5px); coordinates use tabular
+figures. Focus rings are visible, tooltips include shortcuts and reduced-motion
+preferences are honored.
 
 ## 25. Keyboard reference
 

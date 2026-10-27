@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useUiStore } from '../uiStore';
 import { useLayoutStore, type RulerUnit } from './layoutStore';
@@ -114,6 +115,7 @@ export function OptionsBar() {
             value={layout.selectionTolerance}
             onChange={(event) => layout.setSelectionTolerance(Number(event.target.value))}
             aria-label={t('Tolleranza di selezione')}
+            style={{ '--range-fill': `${((layout.selectionTolerance - 1) / 23) * 100}%` } as CSSProperties}
           />
           <span className="options-unit mono">{layout.selectionTolerance} px</span>
         </label>

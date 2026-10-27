@@ -1,0 +1,50 @@
+name: Desktop release
+
+# A tag like v0.6.0 builds the Windows installer and attaches it to the GitHub
+# release. The asset is uploaded under the stable name Terrain-O-Setup.exe so the
+# download page can always link to /releases/latest/download/Terrain-O-Setup.exe.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    name: Installer Windows (NSIS)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Compila l'installer
+        run: npx electron-builder --win nsis --x64
+      - name: Verifica l'installer
+        shell: pwsh
+        run: |
+          $exe = "release/Terrain-O-Setup-$((Get-Content package.json | ConvertFrom-Json).version).exe"
+          if (-not (Test-Path $exe)) { throw "Installer non trovato: $exe" }
+          Copy-Item $exe "release/Terrain-O-Setup.exe" -Force
+          Get-Item "release/Terrain-O-Setup.exe" | Select-Object Name, Length
+      - name: Pubblica la release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Terrain / O ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release/Terrain-O-Setup.exe
+      - name: Conserva l'installer come artefatto
+        uses: actions/upload-artifact@v4
+        with:
+          name: Terrain-O-Setup
+          path: release/Terrain-O-Setup.exe
+          retention-days: 14

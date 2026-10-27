@@ -34,6 +34,8 @@ export const en: Record<string, string> = {
   Legenda: 'Legend',
   Minimappa: 'Minimap',
   Mirino: 'Crosshair',
+  'Tema scuro': 'Dark theme',
+  'Tema chiaro': 'Light theme',
   'Pannello Livelli': 'Layers panel',
   'Pannello Elementi cartografici': 'Map features panel',
   'Pannello Proprietà': 'Properties panel',

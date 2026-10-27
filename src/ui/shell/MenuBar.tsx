@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { Mark } from '../components/Mark';
 import { useDevice } from '../useDevice';
 import { useT, useLocaleStore } from '../../i18n';
+import { useThemeStore } from '../themeStore';
 
 export type ExportFocus = 'export-geojson' | 'export-omap' | 'export-svg' | 'export-png-1' | 'export-pdf-a4';
 
@@ -51,6 +52,8 @@ export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnbo
   const [anchor, setAnchor] = useState<AnchorRect | null>(null);
   const [shift, setShift] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const theme = useThemeStore((state) => state.theme);
+  const setTheme = useThemeStore((state) => state.setTheme);
   const barRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const device = useDevice();
@@ -310,6 +313,9 @@ export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnbo
         { label: 'Legenda', checked: layout.legend, action: () => layout.setLegend(!layout.legend) },
         { label: 'Minimappa', checked: minimapVisible, action: () => setMinimapVisible(!minimapVisible) },
         { label: 'Mirino', checked: layout.crosshair, action: () => layout.setCrosshair(!layout.crosshair) },
+        { separator: true, label: '' },
+        { label: 'Tema scuro', checked: theme === 'dark', action: () => setTheme('dark') },
+        { label: 'Tema chiaro', checked: theme === 'light', action: () => setTheme('light') },
         { separator: true, label: '' },
         { label: 'Pannello Livelli', action: () => showPanel('layers') },
         { label: 'Pannello Elementi cartografici', action: () => showPanel('features') },

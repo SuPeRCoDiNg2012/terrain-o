@@ -26,6 +26,7 @@ import {
   Menu,
   TriangleAlert,
   MousePointer2,
+  Moon,
   Mountain,
   MoreHorizontal,
   Pentagon,
@@ -40,6 +41,7 @@ import {
   Search,
   ShieldCheck,
   Spline,
+  Sun,
   Trash2,
   Type,
   Undo2,
@@ -100,7 +102,9 @@ export type IconName =
   | 'grid'
   | 'history'
   | 'navigator'
-  | 'more';
+  | 'more'
+  | 'sun'
+  | 'moon';
 
 /**
  * Semantic editor names mapped to Lucide line icons: 24x24 grid, stroke
@@ -158,6 +162,8 @@ const glyphs: Record<IconName, LucideIcon> = {
   history: History,
   navigator: Focus,
   more: MoreHorizontal,
+  sun: Sun,
+  moon: Moon,
 };
 
 interface IconProps {

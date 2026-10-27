@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Icon, type IconName } from './Icon';
 
 export function DebouncedTextField({
@@ -136,6 +137,7 @@ export function SliderField({
   display?: string;
   reset?: () => void;
 }) {
+  const percent = max > min ? Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100)) : 0;
   return (
     <label className="range-field">
       <span className="range-label">
@@ -158,7 +160,15 @@ export function SliderField({
           )}
         </span>
       </span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        style={{ '--range-fill': `${percent}%` } as CSSProperties}
+      />
     </label>
   );
 }

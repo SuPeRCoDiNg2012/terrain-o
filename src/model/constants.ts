@@ -7,7 +7,7 @@ import type {
   VerificationEvent,
 } from './types';
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
 export const SCHEMA_VERSION = 'terrain-o/1.0' as const;
 export const MAX_IMAGE_SIDE = 4096;
 export const DEFAULT_PRINT_SCALE = 15000;
