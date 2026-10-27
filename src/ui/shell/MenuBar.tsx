@@ -7,6 +7,7 @@ import { confirmDialog } from '../dialogStore';
 import { toast } from '../toastStore';
 import { DEFAULT_CLASSIFICATION_PARAMS } from '../../model/constants';
 import { Icon } from '../components/Icon';
+import { Mark } from '../components/Mark';
 import { useDevice } from '../useDevice';
 import { useT, useLocaleStore } from '../../i18n';
 
@@ -18,6 +19,7 @@ export interface MenuBarProps {
   onOpenHelp: () => void;
   onOpenOnboarding: () => void;
   onSaveNow: () => void;
+  onEnterEssential: () => void;
 }
 
 interface MenuItem {
@@ -44,7 +46,7 @@ interface AnchorRect {
   width: number;
 }
 
-export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnboarding, onSaveNow }: MenuBarProps) {
+export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnboarding, onSaveNow, onEnterEssential }: MenuBarProps) {
   const [open, setOpen] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<AnchorRect | null>(null);
   const [shift, setShift] = useState(0);
@@ -317,6 +319,8 @@ export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnbo
         { label: 'Pannello Navigatore', action: () => showPanel('navigator') },
         { separator: true, label: '' },
         { label: 'Reimposta layout pannelli', action: () => layout.resetLayout() },
+        { separator: true, label: '' },
+        { label: 'Modalità essenziale', action: onEnterEssential },
       ],
     },
     {
@@ -457,14 +461,16 @@ export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnbo
   const activeMenu = menus.find((menu) => menu.id === open) ?? null;
 
   return (
-    <div className="menu-bar" ref={barRef} role="menubar" aria-label={t('Menu principale')}>
-      <div className="menu-bar-brand" aria-label="Terrain / O">
-        <span className="menu-bar-mark" aria-hidden="true">
-          <Icon name="mountain" size={16} />
-        </span>
-        <span className="menu-bar-name">Terrain <em>/</em> O</span>
-        <span className="menu-bar-draft">{t('BOZZA PRELIMINARE')}</span>
-      </div>
+    <div className="menu-bar" ref={barRef} role="menubar" aria-label={t('Menu principale')}>        <div className="menu-bar-brand" aria-label="Terrain / O">
+          <span className="menu-bar-mark" aria-hidden="true">
+            <Mark size={16} />
+          </span>
+          <span className="menu-bar-name">
+            <span className="wm-a">Terrain</span>
+            <span className="wm-slash">/</span>
+            <span className="wm-o">O</span>
+          </span>
+        </div>
 
       <button
         type="button"
@@ -629,6 +635,16 @@ export function MenuBar({ onOpenFilePicker, onOpenExport, onOpenHelp, onOpenOnbo
 
       <div className="menu-bar-right">
         <span className="menu-bar-project truncate" title={project.name}>{project.name}</span>
+        <button
+          type="button"
+          className="menu-mode-button"
+          onClick={onEnterEssential}
+          title={t('Torna alla modalità essenziale')}
+          data-testid="enter-essential"
+        >
+          <Icon name="fit" size={13} />
+          <span>{t('Essenziale')}</span>
+        </button>
         <button
           type="button"
           className="menu-lang"

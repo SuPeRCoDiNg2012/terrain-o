@@ -62,7 +62,7 @@ const DEFAULTS: PersistedLayout = {
   bottom: [],
   active: { left: 'project', right: 'layers', bottom: 'history' },
   collapsed: { left: false, right: false, bottom: false },
-  widths: { left: 292, right: 326, bottom: 190 },
+  widths: { left: 292, right: 320, bottom: 190 },
   rulers: true,
   rulerUnit: 'px',
   legend: false,

@@ -1,5 +1,12 @@
-import type { ContourLine, Feature, LayerId, Point, Project } from '../model/types';
+import type { ContourLine, Feature, LayerId, MapStandard, Point, Project } from '../model/types';
 import { typeSpec } from '../model/constants';
+import {
+  CONTOUR_BROWN,
+  COURSE_PURPLE,
+  INDEX_CONTOUR_BROWN,
+  featureStyle,
+  projectStandard,
+} from '../model/mapSymbols';
 import { osmSemanticOf } from '../osm/semantic';
 import { osmAreaStyle, osmLineStyle } from '../osm/style';
 import { courseRoute } from '../geo/projection';
@@ -88,7 +95,7 @@ function strokeFeatureOutline(ctx: CanvasRenderingContext2D, feature: Feature, u
   ctx.lineWidth = width * unit;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  if (dashed) ctx.setLineDash([6 * unit, 4 * unit]);
+  if (dashed) ctx.setLineDash([4 * unit, 3 * unit]);
   ctx.beginPath();
   if (feature.kind === 'area') {
     pathForRing(ctx, feature.coords, true);
@@ -100,37 +107,80 @@ function strokeFeatureOutline(ctx: CanvasRenderingContext2D, feature: Feature, u
   ctx.restore();
 }
 
+function drawFence(ctx: CanvasRenderingContext2D, coords: Point[], unit: number): void {
+  if (coords.length < 2) return;
+  const tick = 3.4 * unit;
+  const step = 11 * unit;
+  ctx.save();
+  ctx.strokeStyle = '#141414';
+  ctx.lineWidth = 1.2 * unit;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  pathForRing(ctx, coords, false);
+  ctx.stroke();
+  ctx.beginPath();
+  for (let i = 1; i < coords.length; i++) {
+    const a = coords[i - 1];
+    const b = coords[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1e-6) continue;
+    const nx = (-dy / length) * tick;
+    const ny = (dx / length) * tick;
+    const count = Math.max(1, Math.floor(length / step));
+    for (let n = 0; n <= count; n++) {
+      const t = count === 0 ? 0 : n / count;
+      const x = a.x + dx * t;
+      const y = a.y + dy * t;
+      ctx.moveTo(x - nx, y - ny);
+      ctx.lineTo(x + nx, y + ny);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFeature(
   ctx: CanvasRenderingContext2D,
   feature: Feature,
   unit: number,
   selected: boolean,
   labels: 'none' | 'selected' | 'important',
+  standard: MapStandard,
 ): void {
   const spec = typeSpec(feature.type);
+  const style = featureStyle(feature.type, standard);
   const provenance = PROVENANCE_STYLES[featureProvenance(feature)];
   if (feature.kind === 'area') {
-    fillPolygonWithHoles(ctx, feature, spec.fill ?? spec.color, 0.55);
-    strokeFeatureOutline(ctx, feature, unit, spec.color, selected ? 3 : 1.6);
+    fillPolygonWithHoles(ctx, feature, style.fill ?? spec.fill ?? spec.color, style.fillOpacity ?? 0.7);
+    if (style.strokeWidth > 0 && style.stroke !== 'transparent') {
+      strokeFeatureOutline(ctx, feature, unit, style.stroke, style.strokeWidth, false);
+    }
   } else if (feature.kind === 'line') {
-    ctx.save();
-    ctx.strokeStyle = spec.color;
-    ctx.lineWidth = (feature.type === 'road' ? 3.2 : feature.type === 'stream' ? 2 : 1.8) * unit;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    if (feature.type === 'fence') ctx.setLineDash([5 * unit, 3 * unit]);
-    ctx.beginPath();
-    pathForRing(ctx, feature.coords, false);
-    ctx.stroke();
-    ctx.restore();
+    if (feature.type === 'fence') {
+      drawFence(ctx, feature.coords, unit);
+    } else {
+      ctx.save();
+      ctx.strokeStyle = style.stroke;
+      ctx.lineWidth = style.strokeWidth * unit;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      if (style.dash) ctx.setLineDash(style.dash.map((value) => value * unit));
+      ctx.beginPath();
+      pathForRing(ctx, feature.coords, false);
+      ctx.stroke();
+      ctx.restore();
+    }
   } else {
     const p = feature.coords[0];
     ctx.save();
-    ctx.fillStyle = spec.color;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5 * unit;
+    ctx.fillStyle = style.pointFill ?? spec.fill ?? spec.color;
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = style.strokeWidth * unit;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 4.5 * unit, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, (style.pointRadius ?? 4.5) * unit, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -173,13 +223,14 @@ function drawAreaOrLineLayers(
   unit: number,
   selected: Set<string>,
   labels: RenderOptions['labels'],
+  standard: MapStandard,
 ): void {
   for (const feature of project.features) {
     // Course points are painted by drawCourse, which knows their symbol and
     // control code. Every other point (for example AI-detected trees) belongs
     // to the cartographic layers and must be visible here.
     if (feature.kind === 'point' && ['start', 'control', 'finish'].includes(feature.type)) continue;
-    drawFeature(ctx, feature, unit, selected.has(feature.id), labels ?? 'none');
+    drawFeature(ctx, feature, unit, selected.has(feature.id), labels ?? 'none', standard);
   }
 }
 
@@ -188,7 +239,7 @@ function drawContours(ctx: CanvasRenderingContext2D, contours: ContourLine[], un
   for (const line of contours) {
     if (line.coords.length < 2) continue;
     ctx.save();
-    ctx.strokeStyle = line.index ? '#8c4a1f' : '#a9764a';
+    ctx.strokeStyle = line.index ? INDEX_CONTOUR_BROWN : CONTOUR_BROWN;
     ctx.lineWidth = (line.index ? 1.6 : 0.9) * unit;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -197,7 +248,7 @@ function drawContours(ctx: CanvasRenderingContext2D, contours: ContourLine[], un
     ctx.stroke();
     if (line.index && line.coords.length > 8 && unit < 1.2) {
       const p = line.coords[Math.floor(line.coords.length / 2)];
-      drawLabel(ctx, `${line.elevation} m`, { x: p.x, y: p.y - 5 * unit }, unit, '#6b3f1d', 9);
+      drawLabel(ctx, `${line.elevation} m`, { x: p.x, y: p.y - 5 * unit }, unit, INDEX_CONTOUR_BROWN, 9);
     }
     ctx.restore();
   }
@@ -264,7 +315,7 @@ function drawCoursePoint(
   const radius = (feature.type === 'control' ? 9 : 10) * unit;
   ctx.save();
   ctx.lineWidth = 2.2 * unit;
-  ctx.strokeStyle = '#7e22ce';
+  ctx.strokeStyle = COURSE_PURPLE;
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
   if (feature.type === 'start') {
     ctx.beginPath();
@@ -295,7 +346,7 @@ function drawCoursePoint(
     ctx.stroke();
   }
   if (showCode && feature.type === 'control' && feature.code) {
-    drawLabel(ctx, feature.code, { x: p.x + radius + 10 * unit, y: p.y - radius - 2 * unit }, unit, '#581c87', 11);
+    drawLabel(ctx, feature.code, { x: p.x + radius + 10 * unit, y: p.y - radius - 2 * unit }, unit, COURSE_PURPLE, 11);
   }
   ctx.restore();
   const provenance = PROVENANCE_STYLES[featureProvenance(feature)];
@@ -322,9 +373,8 @@ function drawCourse(
   const route = courseRoute(project);
   if (project.course.showLines && route.length > 1) {
     ctx.save();
-    ctx.strokeStyle = '#9333ea';
+    ctx.strokeStyle = COURSE_PURPLE;
     ctx.lineWidth = 1.7 * unit;
-    ctx.setLineDash([7 * unit, 4 * unit]);
     ctx.lineJoin = 'round';
     ctx.beginPath();
     route.forEach((point, index) => {
@@ -349,6 +399,7 @@ export function drawProject(
   const unit = options.unit;
   const selected = options.selected ?? new Set<string>();
   const labels = options.labels ?? 'none';
+  const standard = projectStandard(project);
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -376,7 +427,7 @@ export function drawProject(
         drawOsm(ctx, project, unit);
         break;
       case 'features':
-        drawAreaOrLineLayers(ctx, project, unit, selected, labels);
+        drawAreaOrLineLayers(ctx, project, unit, selected, labels, standard);
         break;
       case 'course':
         drawCourse(ctx, project, unit, selected, options.showCourseCodes ?? true);

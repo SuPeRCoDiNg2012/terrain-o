@@ -44,6 +44,10 @@ Install the Playwright browser once with `npx playwright install chromium`.
 
 ## 2. What it does
 
+- Opens in an **essential workspace**: the full-window map with only **Load**,
+  **Run everything** and **Export**. Every other control lives behind **Advanced mode**,
+  and **Essential** returns to the three-action screen. The choice persists in
+  `localStorage` (`terrain-o/ui-mode/v1`).
 - Imports JPG/PNG orthophotos together with `.jgw/.jpgw/.pgw/.pngw/.wld` world
   files and `.prj`/`.aux` projections. The source image is stored read-only.
 - Measures in pixels, in metres (georeferencing or two-point calibration) and in
@@ -70,8 +74,9 @@ Install the Playwright browser once with `npx playwright install chromium`.
   agreement are listed individually and can be selected from the panel. The list filters by
   family and minimum area, and the visible rows export to CSV with OSM id, class, agreement,
   area and generation state.
-- Exports PNG (1×/2×/3×), SVG, PDF A4/A3, OMAP XML v9, GeoJSON, GPX, KML and the
-  project file `.terrain-o.json`.
+- Exports PNG (1×/2×/3×), SVG, PDF A4/A3, OMAP XML v9 with the official
+  ISOM 2017-2 or ISSprOM 2019-2 symbol set, GeoJSON, GPX, KML and the project
+  file `.terrain-o.json`.
 - Works offline: projects, images and classifications live in IndexedDB. No
   account and no server upload.
 
@@ -105,7 +110,7 @@ bar. The legend is opt-in (View → Legend) and off by default.
   clipped by the workspace.
 - Contextual options bar for the active tool (snap, grid, tolerance, line offset,
   ruler units, zoom).
-- Vertical tool palette with Material Symbols icons, grouped by category.
+- Vertical tool palette with Lucide line icons, grouped by category.
 - Dockable panels with drag-and-drop, resize handles, collapse and persisted
   layout (`terrain-o/ui-layout/v1`): Project, Layers, Features, Properties,
   Classification, Vectorization, AI recognition, History, Info, Navigator, OSM, DEM,
@@ -220,20 +225,41 @@ ISOM symbol. It recognizes land cover, buildings and trees with the quality of t
 available. It remains experimental material to check in the field, never a statement about
 trafficability or IOF conformity.
 
+### IOF symbols and map standard
+
+The **Project → Scale and print** panel exposes **Map standard**: **ISOM
+2017-2** for forest maps and **ISSprOM 2019-2** for sprint maps. The selector
+changes the codes, geometry and colours used by the canvas, legend, inspector
+and `.omap` export; it is not a cosmetic label.
+
+Codes follow the IOF specifications and the official OpenOrienteering Mapper
+definitions: forest **405**, open land **401**, dense vegetation **410**, water
+**301** (fill **301.1** plus bank **301.4** in ISOM, **301.6** in ISSprOM),
+building **521** (**521.3** plus **521.4** in ISSprOM), paved area **501**, road
+**503** (ISSprOM **501.17**), footpath **505** (ISSprOM **505.1**), stream
+**304** (ISSprOM **305**), fence **516**, isolated tree **417**, start **701**,
+control **703**, finish **706**, control number **704**, contour **101**, index
+contour **102**. The export includes the complete set: **191 ISOM symbols** or
+**185 ISSprOM symbols**, with the official colour tables, so Mapper opens the
+map with the full palette rather than a reduced base. Water, paved areas and
+sprint buildings are exported as fill plus companion outline objects so holes
+remain correct. Definitions derive from OpenOrienteering Mapper's GPL-3.0
+symbol sets; see [NOTICE.md](NOTICE.md).
+
 ---
 
 ## 7. Tests and benchmarks
 
-- 112 Vitest unit/integration tests, including golden synthetic orthophotos,
+- 120 Vitest unit/integration tests, including golden synthetic orthophotos,
   random forest, tree detection, AI training labels, automatic pipeline
   orchestration and symbol fusion, OSM multipolygon/semantic/prior fusion,
   property-based vectorization invariants, IndexedDB repair and a 4000×4000
   benchmark.
-- 13 Playwright tests cover the desktop shell, menus and keyboard, language
+- 19 Playwright tests cover the essential workspace, the desktop shell, menus and keyboard, language
   persistence, import (including a database left broken by an early build),
   classification preview, vectorization, local AI recognition, one-click
   processing, mocked OSM building/tree import, verification revocation, OMAP
-  export, mobile drawers and WCAG AA contrast.
+  export in both ISOM and ISSprOM standards, mobile drawers and WCAG AA contrast.
 - Current benchmark on the development machine: **≈ 3.0–5.0 s** for a 4000×4000
   image with four classes (threshold: 15 s).
 - Classification of a 2048×2048 synthetic scene takes **≈ 1.2 s** in the staged
@@ -253,7 +279,7 @@ src/
   store/        Zustand project store (geometry writes go through updateFeatureGeometry)
   io/           import/export (PNG, SVG, PDF, OMAP, GeoJSON, GPX, KML, project file)
   geo/          projection and world file handling
-  model/        types, schema (Zod) and constants
+  model/        types, schema (Zod), constants and IOF symbol catalogue
   i18n/         Italian/English copy
 docs/           manuals (IT/EN) and PDF editions
 e2e/            Playwright specs and fixtures
@@ -264,9 +290,10 @@ scripts/        manual PDF builder and UI audit helpers
 
 ## 9. Known limits
 
-No GeoTIFF import, no GPS navigation, no real-time collaboration. OMAP symbols
-are a simplified base and require a cartographer's review in
-OpenOrienteering Mapper. OSM and DEM data can be incomplete or misaligned; OSM
+No GeoTIFF import, no GPS navigation, no real-time collaboration. The OMAP
+symbol set is complete, but the editor only generates the classes supported by
+classification, AI, OSM and manual drawing; a cartographer must still review
+the result in OpenOrienteering Mapper. OSM and DEM data can be incomplete or misaligned; OSM
 fusion produces automatic, unverified hypotheses and never declares runnability,
 vegetation under canopy or IOF compliance. Automatic results are experimental;
 only an explicit field declaration makes a feature verified.

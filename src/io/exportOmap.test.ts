@@ -35,7 +35,7 @@ describe('exportProjectOmap', () => {
       ]),
     ];
     const xml = exportProjectOmap(project);
-    const coords = xml.match(/<coords count="2">([^<]+)<\/coords>/)?.[1] ?? '';
+    const coords = xml.match(/<\/tags><coords count="2">([^<]+)<\/coords>/)?.[1] ?? '';
     // 1 mm per pixel: image (100,100) -> (100000,100000), (200,250) -> (200000,250000).
     expect(coords).toBe('100000 100000;200000 250000;');
   });
@@ -81,7 +81,7 @@ describe('exportProjectOmap', () => {
     );
     project.features = [area];
     const xml = exportProjectOmap(project);
-    const coords = xml.match(/<coords count="10">([^<]+)<\/coords>/)?.[1] ?? '';
+    const coords = xml.match(/<\/tags><coords count="10">([^<]+)<\/coords>/)?.[1] ?? '';
     expect(coords).toContain('100000 100000 2;');
     expect(coords).toContain('150000 150000 18;');
     expect(coords).not.toContain('100000 100000 18;');

@@ -1,4 +1,4 @@
-import type { Feature } from '../../model/types';
+import type { Feature, MapStandard } from '../../model/types';
 import { selectCourseFeatures, useProjectStore } from '../../store/projectStore';
 import {
   AREA_TYPES,
@@ -6,6 +6,7 @@ import {
   POINT_TYPES,
   typeSpec,
 } from '../../model/constants';
+import { projectStandard, symbolCode } from '../../model/mapSymbols';
 import {
   featureAreaMeters,
   featureLengthMeters,
@@ -32,8 +33,11 @@ function typesForKind(kind: Feature['kind']): Record<string, { label: string }> 
   return POINT_TYPES;
 }
 
-function typeOptionsFor(kind: Feature['kind']): Array<{ value: string; label: string }> {
-  return Object.entries(typesForKind(kind)).map(([value, spec]) => ({ value, label: spec.label }));
+function typeOptionsFor(kind: Feature['kind'], standard: MapStandard): Array<{ value: string; label: string }> {
+  return Object.entries(typesForKind(kind)).map(([value, spec]) => {
+    const code = symbolCode(value, standard);
+    return { value, label: code ? `${spec.label} · ${code}` : spec.label };
+  });
 }
 
 function formatDate(iso: string): string {
@@ -66,6 +70,7 @@ function geometrySummary(feature: Feature, project: Parameters<typeof featureLen
 
 export function Inspector() {
   const project = useProjectStore((state) => state.project);
+  const standard = projectStandard(project);
   const selection = useProjectStore((state) => state.selection);
   const select = useProjectStore((state) => state.select);
   const updateFeatureFields = useProjectStore((state) => state.updateFeatureFields);
@@ -184,7 +189,7 @@ export function Inspector() {
                 }}
               >
                 <option value="">Cambia tipo…</option>
-                {typeOptionsFor(kind).map((option) => (
+                {typeOptionsFor(kind, standard).map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
@@ -210,7 +215,7 @@ export function Inspector() {
               onChange={(event) => updateFeatureFields(single.id, { type: event.target.value })}
               data-testid="inspector-type"
             >
-              {typeOptionsFor(single.kind).map((option) => (
+              {typeOptionsFor(single.kind, standard).map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
@@ -242,6 +247,7 @@ export function Inspector() {
 
           <div className="inspector-meta">
             <div><span>Geometria</span><strong>{geometrySummary(single, project)}</strong></div>
+            <div><span>Simbolo {standard === 'isom' ? 'ISOM' : 'ISSprOM'}</span><strong className="mono">{symbolCode(single.type, standard) ?? '—'}</strong></div>
             <div><span>Fonte</span><strong>{SOURCE_LABEL[single.source ?? 'manual']}</strong></div>
             {single.source === 'osm' && <div><span>Stato dati</span><strong>automatico, non verificato</strong></div>}
             {single.osmId != null && <div><span>ID OSM</span><strong className="mono">{single.osmId}</strong></div>}

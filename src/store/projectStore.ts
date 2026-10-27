@@ -6,6 +6,7 @@ import type {
   ClassificationParams,
   Feature,
   LayerId,
+  MapStandard,
   Point,
   Project,
 } from '../model/types';
@@ -184,6 +185,7 @@ export interface ProjectState {
 
   setName: (name: string) => void;
   setPrintScale: (scale: number) => void;
+  setMapStandard: (standard: MapStandard) => void;
   setShowNorth: (show: boolean) => void;
   setCalibration: (samples: CalibrationSample[]) => void;
   clearCalibration: () => void;
@@ -893,6 +895,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     setPrintScale: (scale) =>
       get().apply((draft) => {
         draft.printScale = Math.max(1000, Math.min(50000, Math.round(scale)));
+      }),
+
+    setMapStandard: (standard) =>
+      get().apply((draft) => {
+        draft.mapStandard = standard === 'issprom' ? 'issprom' : 'isom';
       }),
 
     setShowNorth: (show) =>

@@ -8,6 +8,7 @@ async function openApp(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('terrain-o:onboarding-v1', 'seen');
     localStorage.setItem('terrain-o/locale/v1', 'it');
+    localStorage.setItem('terrain-o/ui-mode/v1', 'advanced');
   });
   await page.goto('/');
   await expect(page.getByTestId('app-shell')).toBeVisible();
@@ -31,6 +32,16 @@ async function violations(page: Page) {
 }
 
 test.describe('WCAG AA in the desktop shell', () => {
+  test('the essential workspace has no contrast violations', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('terrain-o:onboarding-v1', 'seen');
+      localStorage.setItem('terrain-o/locale/v1', 'it');
+    });
+    await page.goto('/');
+    await expect(page.getByTestId('simple-shell')).toBeVisible();
+    expect(await violations(page), 'essential shell').toEqual([]);
+  });
+
   test('shell, panels and export dialog have no contrast violations', async ({ page }) => {
     await openApp(page);
     expect(await violations(page), 'empty shell').toEqual([]);

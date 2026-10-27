@@ -118,9 +118,7 @@ export function StatusBar() {
       <div className="status-segment status-muted" title={t('Spazio stimato occupato dal progetto locale')}>
         <Icon name="layers" size={12} /> {memoryLabel(storage?.usage)}
       </div>
-      <div className="status-segment status-muted">
-        <Icon name="shield" size={12} /> {t('bozza preliminare')}
-      </div>
+      <div className="status-segment status-draft">{t('Bozza preliminare')}</div>
     </footer>
   );
 }

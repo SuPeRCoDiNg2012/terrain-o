@@ -1,16 +1,20 @@
 import { AREA_TYPES, LINE_TYPES, POINT_TYPES } from '../../model/constants';
+import { featureStyle, projectStandard, symbolCode } from '../../model/mapSymbols';
+import { useProjectStore } from '../../store/projectStore';
 import { CLASS_COLORS } from '../../classify/classify';
 import { Icon } from '../components/Icon';
 import { useLayoutStore } from './layoutStore';
 
 const AREA_KEYS = ['forest', 'thicket', 'open', 'water', 'building', 'artificial'];
 const LINE_KEYS = ['path', 'road', 'stream', 'fence'];
-const POINT_KEYS = ['start', 'control', 'finish'];
+const POINT_KEYS = ['tree', 'start', 'control', 'finish'];
 
 export function MapLegend() {
   const visible = useLayoutStore((state) => state.legend);
   const setLegend = useLayoutStore((state) => state.setLegend);
+  const standard = useProjectStore((state) => projectStandard(state.project));
   if (!visible) return null;
+  const code = (type: string) => symbolCode(type, standard);
 
   return (
     <aside className="map-legend" aria-label="Legenda">
@@ -29,6 +33,7 @@ export function MapLegend() {
             <span className="map-legend-item" key={key}>
               <i className="legend-swatch" style={{ background: spec.fill ?? spec.color, borderColor: spec.color }} />
               {spec.short}
+              {code(key) && <span className="map-legend-code">{code(key)}</span>}
             </span>
           );
         })}
@@ -40,8 +45,15 @@ export function MapLegend() {
           if (!spec) return null;
           return (
             <span className="map-legend-item" key={key}>
-              <i className="legend-line" style={{ background: spec.color }} />
+              <i
+                className="legend-line"
+                style={{
+                  background: 'transparent',
+                  borderTop: `${Math.max(1, Math.min(3, featureStyle(key, standard).strokeWidth))}px ${featureStyle(key, standard).dash ? 'dashed' : 'solid'} ${featureStyle(key, standard).stroke}`,
+                }}
+              />
               {spec.short}
+              {code(key) && <span className="map-legend-code">{code(key)}</span>}
             </span>
           );
         })}
@@ -55,6 +67,7 @@ export function MapLegend() {
             <span className="map-legend-item" key={key}>
               <i className="legend-dot" style={{ background: spec.color }} />
               {spec.short}
+              {code(key) && <span className="map-legend-code">{code(key)}</span>}
             </span>
           );
         })}

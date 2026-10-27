@@ -74,7 +74,7 @@ export function ToolPalette() {
                 onClick={() => setTool(tool.id)}
                 data-testid={`tool-${tool.id}`}
               >
-                <Icon name={tool.icon} size={18} />
+                <Icon name={tool.icon} size={20} />
                 <span className="palette-tool-key" aria-hidden="true">{tool.shortcut}</span>
               </button>
             );

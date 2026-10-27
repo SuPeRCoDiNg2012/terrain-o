@@ -47,4 +47,15 @@ describe('project schema · AI metadata', () => {
     expect(project.symbolFusion).toBeUndefined();
     expect(() => validateProject(project)).not.toThrow();
   });
+
+  it('defaults legacy projects to ISOM and preserves an explicit sprint standard', () => {
+    const project = makeTestProject();
+    expect(project.mapStandard).toBe('isom');
+    project.mapStandard = 'issprom';
+    expect(validateProject(project).mapStandard).toBe('issprom');
+
+    const legacy = makeTestProject();
+    delete (legacy as { mapStandard?: string }).mapStandard;
+    expect(validateProject(legacy).mapStandard).toBe('isom');
+  });
 });

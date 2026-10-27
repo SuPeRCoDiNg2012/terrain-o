@@ -20,11 +20,14 @@ import { useLayoutStore } from '../shell/layoutStore';
 import { Rulers } from '../shell/Rulers';
 import { MapLegend } from '../shell/MapLegend';
 import { CanvasStageOverlay } from './CanvasStageOverlay';
+import { Mark } from './Mark';
 
 interface MapStageProps {
   onFiles: (files: File[]) => void;
   onOpenFilePicker: () => void;
   onOpenHelp: () => void;
+  /** Essential workspace: no rulers, minimap, legend or floating controls. */
+  minimal?: boolean;
 }
 
 type DragMode =
@@ -116,7 +119,7 @@ function featureTouches(polygon: Point[], feature: Feature): boolean {
   return false;
 }
 
-export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProps) {
+export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp, minimal = false }: MapStageProps) {
   const project = useProjectStore((state) => state.project);
   const sourceImage = useProjectStore((state) => state.sourceImage);
   const classificationImage = useProjectStore((state) => state.classificationImage);
@@ -925,7 +928,7 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
 
   return (
     <section
-      className={`map-stage ${dragActive ? 'drag-active' : ''}`}
+      className={`map-stage ${dragActive ? 'drag-active' : ''} ${minimal ? 'map-stage-minimal' : ''}`}
       ref={stageRef}
       aria-label="Area mappa"
       onDragOver={(event) => {
@@ -988,31 +991,36 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
           />
         )}
         {!project.image && (
-          <div className="stage-empty">
-            <div className="stage-empty-card">
-              <div className="stage-empty-mark"><Icon name="mountain" size={34} /></div>
-              <div className="eyebrow">Studio cartografico locale</div>
-              <h2>Inizia da un'ortofoto</h2>
-              <p>
-                Importa una o più immagini JPG/PNG. Trascina insieme il world file e il <code>.prj</code> per la
-                georeferenziazione; senza world file le misure restano in pixel.
-              </p>
-              <div className="stage-empty-actions">
-                <button type="button" className="btn btn-primary" onClick={onOpenFilePicker}>
-                  <Icon name="import" size={18} /> Scegli file
-                </button>
-                <button type="button" className="btn btn-ghost" onClick={onOpenHelp}>
-                  Come funziona
-                </button>
+          minimal ? (
+            <div className="stage-empty simple-empty">
+              <div className="simple-empty-card">
+                <div className="simple-empty-mark"><Icon name="mountain" size={28} /></div>
+                <h2>Carica un’ortofoto per iniziare</h2>
+                <p>JPG o PNG. Per georeferenziare, trascina anche il world file e il .prj.</p>
               </div>
-              <div className="drop-hint">
-                <Icon name="image" size={16} /> JPG/PNG + .jgw/.jpgw/.pgw/.pngw/.wld + .prj
-              </div>
-              <p className="tiny muted">
-                Terrain / O è uno strumento di bozza. Nessuna dichiarazione automatica di percorribilità, quota o conformità IOF.
-              </p>
             </div>
-          </div>
+          ) : (
+            <div className="stage-empty">
+              <div className="stage-empty-card">
+                <div className="stage-empty-mark"><Mark size={48} /></div>
+                <h2>Importa un’ortofoto georeferenziata</h2>
+                <p className="stage-empty-formats">
+                  Formati: JPEG, PNG · world file .jgw / .jpgw / .pgw / .pngw / .wld e .prj
+                </p>
+                <div className="stage-empty-actions">
+                  <button type="button" className="btn btn-primary" onClick={onOpenFilePicker}>
+                    <Icon name="import" size={18} /> Scegli file
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={onOpenHelp}>
+                    Come funziona
+                  </button>
+                </div>
+                <p className="tiny muted">
+                  Terrain / O è uno strumento di bozza. Nessuna dichiarazione automatica di percorribilità, quota o conformità IOF.
+                </p>
+              </div>
+            </div>
+          )
         )}
         {project.image && !sourceImage && (
           <div className="stage-overlay-message">Caricamento immagine sorgente…</div>
@@ -1022,7 +1030,7 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
 
       {project.image && (
         <>
-          {layout.rulers && (
+          {!minimal && layout.rulers && (
             <Rulers view={view} viewport={viewport} project={project} unit={layout.rulerUnit} cursor={cursor} />
           )}
           <CanvasStageOverlay
@@ -1042,7 +1050,7 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
             cursorScreen={cursorScreen}
           />
 
-          <MapLegend />
+          {!minimal && <MapLegend />}
 
           {(draft.length > 0 || activeTool === 'calibrate') && (
             <div className="draft-bar" data-stage-interactive>
@@ -1072,24 +1080,28 @@ export function MapStage({ onFiles, onOpenFilePicker, onOpenHelp }: MapStageProp
             </div>
           )}
 
-          <div className="zoom-controls" data-stage-interactive>
-            <button type="button" className="tool-button" onClick={() => zoomButton(1.2)} aria-label="Ingrandisci" title="Ingrandisci">
-              <Icon name="plus" />
-            </button>
-            <button type="button" className="tool-button" onClick={() => zoomButton(1 / 1.2)} aria-label="Riduci" title="Riduci">
-              <Icon name="minus" />
-            </button>
-            <button type="button" className="tool-button" onClick={() => fitImage()} aria-label="Adatta immagine" title="Adatta immagine">
-              <Icon name="fit" />
-            </button>
-          </div>
+          {!minimal && (
+            <>
+              <div className="zoom-controls" data-stage-interactive>
+                <button type="button" className="tool-button" onClick={() => zoomButton(1.2)} aria-label="Ingrandisci" title="Ingrandisci">
+                  <Icon name="plus" />
+                </button>
+                <button type="button" className="tool-button" onClick={() => zoomButton(1 / 1.2)} aria-label="Riduci" title="Riduci">
+                  <Icon name="minus" />
+                </button>
+                <button type="button" className="tool-button" onClick={() => fitImage()} aria-label="Adatta immagine" title="Adatta immagine">
+                  <Icon name="fit" />
+                </button>
+              </div>
 
-          {minimapVisible ? (
-            <Minimap onClose={() => setMinimapVisible(false)} />
-          ) : (
-            <button type="button" className="minimap-reopen" onClick={() => setMinimapVisible(true)} data-stage-interactive aria-label="Mostra minimappa">
-              <Icon name="map" size={16} /> Minimappa
-            </button>
+              {minimapVisible ? (
+                <Minimap onClose={() => setMinimapVisible(false)} />
+              ) : (
+                <button type="button" className="minimap-reopen" onClick={() => setMinimapVisible(true)} data-stage-interactive aria-label="Mostra minimappa">
+                  <Icon name="map" size={16} /> Minimappa
+                </button>
+              )}
+            </>
           )}
 
           {(project.osmWays.length > 0 || project.contours.length > 0) && (

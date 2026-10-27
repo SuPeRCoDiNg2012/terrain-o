@@ -16,6 +16,7 @@ import { OptionsBar } from './shell/OptionsBar';
 import { ToolPalette } from './shell/ToolPalette';
 import { Dock } from './shell/Dock';
 import { StatusBar } from './shell/StatusBar';
+import { SimpleShell } from './shell/SimpleShell';
 import { Icon } from './components/Icon';
 import { ImportCancelledError, importImageFiles } from '../io/importProject';
 import { importProjectFile } from '../io/projectFile';
@@ -53,6 +54,21 @@ export function App() {
   const rightOpen = useUiStore((state) => state.rightOpen);
   const setLeftOpen = useUiStore((state) => state.setLeftOpen);
   const setRightOpen = useUiStore((state) => state.setRightOpen);
+  const mode = useUiStore((state) => state.mode);
+  const setUiMode = useUiStore((state) => state.setMode);
+  const autoJob = useProjectStore((state) => state.autoJob);
+  const autoReport = useProjectStore((state) => state.autoReport);
+  const runAutomaticPipeline = useProjectStore((state) => state.runAutomaticPipeline);
+  const cancelAutomaticPipeline = useProjectStore((state) => state.cancelAutomaticPipeline);
+  const pipelineBusy = useProjectStore(
+    (state) =>
+      state.autoJob.running ||
+      state.classificationJob.running ||
+      state.vectorJob.running ||
+      state.aiJob.running ||
+      state.osmJob.running ||
+      state.demJob.running,
+  );
   const optionsBar = useLayoutStore((state) => state.optionsBar);
   const device = useDevice();
   const locale = useLocaleStore((state) => state.locale);
@@ -76,6 +92,43 @@ export function App() {
   const localeRef = useRef(locale);
   localeRef.current = locale;
   latestProjectRef.current = project;
+
+  const enterEssential = useCallback(() => {
+    setUiMode('essential');
+    setTool('pan');
+    setLeftOpen(false);
+    setRightOpen(false);
+    setHelpOpen(false);
+  }, [setLeftOpen, setRightOpen, setTool, setUiMode]);
+
+  const enterAdvanced = useCallback(() => {
+    setUiMode('advanced');
+    setTool('select');
+  }, [setTool, setUiMode]);
+
+  // In the essential workspace the map is a viewer: panning stays available,
+  // but the editing tools cannot be armed without the advanced controls.
+  useEffect(() => {
+    if (mode !== 'essential') return;
+    if (useProjectStore.getState().activeTool === 'pan') return;
+    setTool('pan');
+  }, [mode, setTool]);
+
+  const runAll = useCallback(async () => {
+    if (!useProjectStore.getState().project.image) return;
+    const report = await runAutomaticPipeline();
+    const state = useProjectStore.getState();
+    if (!report) {
+      if (state.autoJob.error) toast(state.autoJob.error, 'error');
+      return;
+    }
+    if (state.autoJob.phase === 'Elaborazione annullata') return;
+    if (report.warnings.length) {
+      toast(`Elaborazione completata con ${report.warnings.length} avvisi.`, 'info');
+    } else {
+      toast(`Elaborazione completa: ${report.totalFeatures} simboli nel livello unico.`, 'success');
+    }
+  }, [runAutomaticPipeline]);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -221,6 +274,23 @@ export function App() {
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
 
+      // The essential workspace has no tools, panels or history controls.
+      // Only the three primary paths keep a keyboard shortcut; every editing
+      // command is deliberately unreachable until advanced mode is opened.
+      if (useUiStore.getState().mode === 'essential') {
+        if (mod && key === 'o') {
+          event.preventDefault();
+          openFilePicker();
+          return;
+        }
+        if (mod && key === 'e') {
+          event.preventDefault();
+          setExportOpen(true);
+          return;
+        }
+        return;
+      }
+
       if (mod && key === 'z') {
         event.preventDefault();
         if (event.shiftKey) state.redo();
@@ -360,21 +430,24 @@ export function App() {
 
   return (
     <div
-      className="app-shell pro-shell"
+      className={`app-shell pro-shell ${mode === 'essential' ? 'simple-mode' : ''}`}
       data-testid="app-shell"
       data-device={device.mode}
       data-touch={device.isTouch ? 'true' : 'false'}
     >
-      <MenuBar
-        onOpenFilePicker={openFilePicker}
-        onOpenExport={(focus) => {
-          setExportFocus(focus);
-          setExportOpen(true);
-        }}
-        onOpenHelp={() => setHelpOpen(true)}
-        onOpenOnboarding={() => setOnboardingOpen(true)}
-        onSaveNow={() => void saveNow()}
-      />
+      {mode === 'advanced' && (
+        <MenuBar
+          onOpenFilePicker={openFilePicker}
+          onOpenExport={(focus) => {
+            setExportFocus(focus);
+            setExportOpen(true);
+          }}
+          onOpenHelp={() => setHelpOpen(true)}
+          onOpenOnboarding={() => setOnboardingOpen(true)}
+          onSaveNow={() => void saveNow()}
+          onEnterEssential={enterEssential}
+        />
+      )}
 
       {(loadError || saveState === 'error') && (
         <div className="app-banner" role="alert">
@@ -406,92 +479,122 @@ export function App() {
         </div>
       )}
 
-      <div className="pro-body">
-        <ToolPalette />
-        <div className="editor-column">
-          {optionsBar && <OptionsBar />}
-          <div className="editor-center">
-            <Dock
-              side="left"
-              mobileOpen={leftOpen}
-              onOpenFilePicker={openFilePicker}
-              onImportProjectFile={(file) => void handleFiles([file])}
-              onOpenExport={() => setExportOpen(true)}
-              onOpenHelp={() => setHelpOpen(true)}
-            />
-            <main className="map-column">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".jpg,.jpeg,.png,.jgw,.jpgw,.pgw,.pngw,.wld,.wjf,.prj,.aux,application/json,image/jpeg,image/png"
-                className="sr-only"
-                aria-label="Seleziona file da importare: ortofoto, world file, proiezione o progetto JSON"
-                data-testid="file-input"
-                onChange={(event) => {
-                  const files = [...(event.target.files ?? [])];
-                  event.target.value = '';
-                  if (files.length) void handleFiles(files);
-                }}
-              />
-              <MapStage onFiles={(files) => void handleFiles(files)} onOpenFilePicker={openFilePicker} onOpenHelp={() => setHelpOpen(true)} />
-            </main>
-            <Dock
-              side="right"
-              mobileOpen={rightOpen}
-              onOpenFilePicker={openFilePicker}
-              onImportProjectFile={(file) => void handleFiles([file])}
-              onOpenExport={() => setExportOpen(true)}
-              onOpenHelp={() => setHelpOpen(true)}
-            />
-          </div>
-          <Dock
-            side="bottom"
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".jpg,.jpeg,.png,.jgw,.jpgw,.pgw,.pngw,.wld,.wjf,.prj,.aux,application/json,image/jpeg,image/png"
+        className="sr-only"
+        aria-label="Seleziona file da importare: ortofoto, world file, proiezione o progetto JSON"
+        data-testid="file-input"
+        onChange={(event) => {
+          const files = [...(event.target.files ?? [])];
+          event.target.value = '';
+          if (files.length) void handleFiles(files);
+        }}
+      />
+
+      {mode === 'essential' ? (
+        <SimpleShell
+          projectName={project.name}
+          hasImage={Boolean(project.image)}
+          hasContent={Boolean(project.image || project.features.length)}
+          importing={Boolean(importPhase)}
+          busy={pipelineBusy}
+          autoJob={autoJob}
+          autoReport={autoReport}
+          onLoad={openFilePicker}
+          onRunAll={() => void runAll()}
+          onExport={() => {
+            setExportFocus(undefined);
+            setExportOpen(true);
+          }}
+          onAdvanced={enterAdvanced}
+          onCancel={cancelAutomaticPipeline}
+        >
+          <MapStage
+            minimal
+            onFiles={(files) => void handleFiles(files)}
             onOpenFilePicker={openFilePicker}
-            onImportProjectFile={(file) => void handleFiles([file])}
-            onOpenExport={() => setExportOpen(true)}
             onOpenHelp={() => setHelpOpen(true)}
           />
-        </div>
-      </div>
-      <StatusBar />
+        </SimpleShell>
+      ) : (
+        <>
+          <div className="pro-body">
+            <ToolPalette />
+            <div className="editor-column">
+              {optionsBar && <OptionsBar />}
+              <div className="editor-center">
+                <Dock
+                  side="left"
+                  mobileOpen={leftOpen}
+                  onOpenFilePicker={openFilePicker}
+                  onImportProjectFile={(file) => void handleFiles([file])}
+                  onOpenExport={() => setExportOpen(true)}
+                  onOpenHelp={() => setHelpOpen(true)}
+                />
+                <main className="map-column">
+                  <MapStage onFiles={(files) => void handleFiles(files)} onOpenFilePicker={openFilePicker} onOpenHelp={() => setHelpOpen(true)} />
+                </main>
+                <Dock
+                  side="right"
+                  mobileOpen={rightOpen}
+                  onOpenFilePicker={openFilePicker}
+                  onImportProjectFile={(file) => void handleFiles([file])}
+                  onOpenExport={() => setExportOpen(true)}
+                  onOpenHelp={() => setHelpOpen(true)}
+                />
+              </div>
+              <Dock
+                side="bottom"
+                onOpenFilePicker={openFilePicker}
+                onImportProjectFile={(file) => void handleFiles([file])}
+                onOpenExport={() => setExportOpen(true)}
+                onOpenHelp={() => setHelpOpen(true)}
+              />
+            </div>
+          </div>
+          <StatusBar />
 
-      <button
-        type="button"
-        className="mobile-panel-button mobile-left"
-        onClick={() => {
-          setLeftOpen(true);
-          setRightOpen(false);
-        }}
-        aria-label="Apri pannello progetto"
-      >
-        <Icon name="menu" size={18} />
-      </button>
-      <button
-        type="button"
-        className="mobile-panel-button mobile-right"
-        onClick={() => {
-          setRightOpen(true);
-          setLeftOpen(false);
-        }}
-        aria-label="Apri pannello livelli"
-      >
-        <Icon name="layers" size={18} />
-      </button>
+          <button
+            type="button"
+            className="mobile-panel-button mobile-left"
+            onClick={() => {
+              setLeftOpen(true);
+              setRightOpen(false);
+            }}
+            aria-label="Apri pannello progetto"
+          >
+            <Icon name="menu" size={18} />
+          </button>
+          <button
+            type="button"
+            className="mobile-panel-button mobile-right"
+            onClick={() => {
+              setRightOpen(true);
+              setLeftOpen(false);
+            }}
+            aria-label="Apri pannello livelli"
+          >
+            <Icon name="layers" size={18} />
+          </button>
 
-      {device.isMobile && (leftOpen || rightOpen) && (
-        <button
-          type="button"
-          className="mobile-scrim"
-          aria-label="Chiudi i pannelli laterali"
-          onClick={() => {
-            setLeftOpen(false);
-            setRightOpen(false);
-          }}
-        />
+          {device.isMobile && (leftOpen || rightOpen) && (
+            <button
+              type="button"
+              className="mobile-scrim"
+              aria-label="Chiudi i pannelli laterali"
+              onClick={() => {
+                setLeftOpen(false);
+                setRightOpen(false);
+              }}
+            />
+          )}
+        </>
       )}
 
-      {onboardingOpen && <Onboarding onClose={() => setOnboardingOpen(false)} />}
+      {onboardingOpen && mode === 'advanced' && <Onboarding onClose={() => setOnboardingOpen(false)} />}
       {helpOpen && (
         <HelpModal
           onClose={() => setHelpOpen(false)}

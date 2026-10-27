@@ -79,15 +79,21 @@ npm run check        # all four quality gates
 
 ## 3. First run
 
-1. The onboarding tour opens once. Skip it or follow the four steps.
-2. In **Project → Source image**, choose **Import orthophoto** (or drag files onto
-   the map). Select the image together with its world file and, when available,
-   the `.prj`.
-3. The source appears in the map. The left panel reports pixel or georeferenced
-   measurements; if no world file is present the app says so and stays in pixels.
-4. The right panel opens on **Layers**. Use the tool palette on the left to draw,
-   then the Classification and Vectorization panels to derive automatic layers.
-5. Export from **File → Export map and data…** or the export icon.
+1. The app opens in the **essential workspace**: a full-window map with **Load**,
+   **Run everything** and **Export**. **Advanced mode** opens the complete editor;
+   **Essential** returns to the three-action screen. The choice is remembered.
+2. Choose **Load** and select the image together with its world file and, when
+   available, the `.prj`.
+3. The source appears in the map. In advanced mode the left panel reports pixel or
+   georeferenced measurements; if no world file is present the app says so and
+   stays in pixels.
+4. Open **Advanced mode** and use **Layers**, the tool palette and the Classification
+   and Vectorization panels when you need manual control.
+5. Export from **Export** in the essential bar, or from **File → Export map and data…**
+   in advanced mode.
+
+The first time advanced mode opens, the four-step onboarding tour appears. Skip it
+or follow it; **Help → Guided introduction** replays it.
 
 ## 4. Desktop, tablet and phone
 
@@ -439,7 +445,7 @@ Navigator shows a thumbnail with the visible rectangle; click to move.
 | PNG 1×/2×/3× | whole map, metric bar when scaled, attributions |
 | SVG | real vector geometry, embedded raster, physical scale |
 | PDF A4/A3 | map, legend, warnings, attributions |
-| OMAP XML v9 | OpenOrienteering Mapper 0.9.x, simplified symbols |
+| OMAP XML v9 | OpenOrienteering Mapper 0.9.x, complete official ISOM or ISSprOM set |
 | GeoJSON | WGS84 if georeferenced, pixel coordinates + explicit metadata otherwise |
 | GPX / KML | course and features, requires georeferencing |
 | `.terrain-o.json` | complete project, including image and classification |
@@ -447,6 +453,16 @@ Navigator shows a thumbnail with the visible rectangle; click to move.
 Every file carries the preliminary-draft warning. OMAP output must be reviewed in
 OpenOrienteering Mapper by a cartographer. Topology validation runs before
 export; a failing geometry blocks the export with a clear message.
+
+**Map standard.** In **Project → Scale and print**, choose **ISOM 2017-2** for
+forest maps or **ISSprOM 2019-2** for sprint maps. The selection changes canvas,
+legend, inspector and `.omap` symbol codes and geometry: road **503** becomes
+**501.17**, footpath **505** becomes **505.1**, stream **304** becomes **305**.
+The `.omap` file carries the complete official set (191 ISOM or 185 ISSprOM
+symbols) and its colour table, so Mapper opens the full palette. Water, paved
+areas and sprint buildings are written as fill plus companion outline objects,
+preserving holes. Definitions come from OpenOrienteering Mapper's GPL-3.0 symbol
+sets; see `NOTICE.md`.
 
 ## 24. Language and theme
 
@@ -458,7 +474,7 @@ manuals exist in both languages (this file and `TUTORIAL.md`).
 
 The theme is a compact dark graphite interface with a single blue interaction
 accent; green is reserved for the brand, verified state and success. Interface
-font: Inter (self-hosted); icons: Material Symbols Rounded (self-hosted subset);
+font: IBM Plex Sans/Mono (self-hosted); icons: Lucide (line, stroke 1.5px);
 coordinates use tabular figures. Contrast targets WCAG AA, focus rings are
 visible, tooltips include shortcuts and reduced-motion preferences are honored.
 
@@ -497,7 +513,9 @@ visible, tooltips include shortcuts and reduced-motion preferences are honored.
 ## 26. Limits and known issues
 
 No GeoTIFF import, no GPS navigation, no real-time collaboration. The OMAP symbol
-set is simplified. OSM and DEM data can be incomplete or misaligned. Automatic
+set is complete, but the editor only generates the classes supported by
+classification, AI, OSM and manual drawing; a cartographer must review the result.
+OSM and DEM data can be incomplete or misaligned. Automatic
 results are experimental. A verified state is a user declaration, not a
 certification by the software. Deleting browser data deletes local projects: keep
 `.terrain-o.json` exports.

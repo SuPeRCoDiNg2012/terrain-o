@@ -135,11 +135,11 @@ npm run preview
 | --- | --- |
 | `npm run typecheck` | TypeScript senza emissione |
 | `npm run lint` | ESLint su tutto il progetto |
-| `npm test` | Vitest: 112 test |
+| `npm test` | Vitest: 120 test |
 | `npm run test:watch` | Vitest in watch |
 | `npm run coverage` | copertura V8 |
 | `npx playwright install chromium` | installa il browser per gli E2E |
-| `npx playwright test` | 13 test end-to-end desktop + mobile + AI + OSM simulato + elaborazione automatica |
+| `npx playwright test` | 19 test end-to-end: modalità essenziale, desktop, mobile, AI, OSM simulato, elaborazione automatica, standard ISOM/ISSprOM e WCAG AA |
 | `npm run check` | lint, typecheck, test e build in sequenza |
 
 ### 2.6 Manuale PDF
@@ -155,7 +155,12 @@ node scripts/build-manual.mjs
 
 ## 3. Primo avvio
 
-Alla prima apertura compare l'introduzione in quattro passi:
+Alla prima apertura si entra nella **modalità essenziale**: mappa a tutta finestra e
+solo tre azioni, **Carica**, **Esegui tutto** ed **Esporta**. Il pulsante
+**Modalità avanzata** apre l'editor completo; **Essenziale** riporta alla schermata
+minima. La scelta viene ricordata in `localStorage`.
+
+La prima volta che si apre la modalità avanzata compare l'introduzione in quattro passi:
 
 1. importa la sorgente e non modificarla;
 2. l'automatico è sperimentale;
@@ -165,23 +170,20 @@ Alla prima apertura compare l'introduzione in quattro passi:
 I pulsanti **Salta** e **Inizia a lavorare** chiudono l'introduzione e memorizzano la
 scelta. Per rivederla: **Aiuto → Introduzione guidata**.
 
-Senza immagine il canvas mostra la scheda **Inizia da un'ortofoto**, con il pulsante
-**Scegli file** e l'elenco dei formati accettati. La shell è già completa: menu,
-options bar, palette, pannelli e status bar sono attivi, ma gli strumenti che richiedono
-un'immagine sono disabilitati.
+Senza immagine la modalità essenziale mostra **Carica un'ortofoto per iniziare**; il
+pulsante **Carica** accetta JPG/PNG, world file e `.prj`. In modalità avanzata la scheda
+**Inizia da un'ortofoto** aggiunge **Scegli file**, **Come funziona** e l'elenco dei
+formati; gli strumenti che richiedono un'immagine restano disabilitati.
 
 ### 3.1 Cosa si vede all'avvio
 
-- **Menu bar** in alto, con il marchio Terrain / O e l'etichetta **BOZZA PRELIMINARE**.
-- **Options bar** sotto il menu, con le opzioni dello strumento attivo.
-- **Palette strumenti** verticale a sinistra, divisa in Selezione, Disegno,
-  Navigazione, Misura e campione.
-- **Canvas** centrale con la griglia di sfondo.
-- **Dock sinistro** con Progetto, OSM, DEM, Percorso.
-- **Dock destro** con Livelli, Elementi, Proprietà, Classificazione, Vettorizzazione,
-  Storia, Info, Navigatore.
-- **Status bar** in basso con coordinate, zoom, strumento, selezione, provenienza,
-  autosalvataggio e memoria stimata.
+- **Modalità essenziale**: header con marchio Terrain / O e pulsante **Modalità avanzata**;
+  canvas a tutta finestra; barra inferiore con **Carica**, **Esegui tutto**, **Esporta**.
+- **Modalità avanzata**: menu bar, options bar,
+  palette strumenti verticale, dock sinistro (Progetto, OSM, DEM, Percorso), dock destro
+  (Livelli, Elementi, Proprietà, Classificazione, Vettorizzazione, AI, Storia, Info,
+  Navigatore) e status bar con coordinate, zoom, selezione, provenienza, autosalvataggio
+  e memoria stimata.
 
 ---
 
@@ -235,7 +237,7 @@ L'attributo `data-device` sull'app vale `desktop`, `tablet` o `phone`.
 
 ### 5.1 Menu bar
 
-La barra superiore contiene il marchio, l'etichetta **BOZZA PRELIMINARE**, i menu e,
+La barra superiore contiene il marchio **TERRAIN / O**, i menu e,
 a destra, il nome del progetto e le icone Importa, Esporta, Aiuto.
 
 #### File
@@ -383,7 +385,7 @@ La palette è organizzata in gruppi:
 - **Navigazione**: H, Z
 - **Misura e campione**: C, I
 
-Ogni icona ha tooltip con nome e scorciatoia. Lo strumento attivo ha sfondo verde e
+Ogni icona ha tooltip con nome e scorciatoia. Lo strumento attivo ha sfondo elevato, icona arancione e
 barra di accento. Gli strumenti che richiedono un'immagine sono disabilitati finché non
 si importa una sorgente.
 
@@ -607,7 +609,24 @@ La scala di stampa è il denominatore 1:N. Viene usata per:
 
 La scala di stampa non cambia le coordinate né la bbox; cambia solo la resa fisica.
 
-### 8.3 Nord
+### 8.3 Standard carta
+
+Nel pannello Progetto, accanto alla scala di stampa, il selettore **Standard carta**
+sceglie la famiglia di simboli:
+
+| Standard | Uso | Simboli nel file `.omap` |
+| --- | --- | --- |
+| ISOM 2017-2 | mappe di foresta | 191, con tabella colori ufficiale |
+| ISSprOM 2019-2 | mappe sprint | 185, con tabella colori ufficiale |
+
+Il cambio aggiorna i codici e le geometrie usati da canvas, legenda, Inspector ed
+export. Non è solo un'etichetta: strada, sentiero e ruscello, per esempio, passano
+rispettivamente da **503**, **505**, **304** a **501.17**, **505.1**, **305**.
+Acqua ed edificio usano due oggetti complementari (riempimento + bordo) quando lo
+standard li definisce come simboli combinati. Il set completo viene scritto nel file,
+così OpenOrienteering Mapper mostra l'intera palette e non una base ridotta.
+
+### 8.4 Nord
 
 **Mostra freccia nord** disegna una freccia che indica l'orientamento della sorgente.
 Non è un nord geografico verificato. Con world file ruotato la freccia può non
@@ -1217,7 +1236,7 @@ Il tracciato è una bozza: non dichiara la validità del percorso né la conform
 | PDF | Esporta → PDF | mappa vettoriale su pagina |
 | SVG | Esporta → SVG | mappa vettoriale modificabile |
 | GeoJSON | Esporta → GeoJSON | feature e classi, WGS84 se georeferenziato |
-| `.omap` | Esporta → OMAP | formato OOM con simboli |
+| `.omap` | Esporta → OMAP | OOM con set ufficiale ISOM o ISSprOM completo |
 | GPX / KML | Esporta → GPX/KML | tracciato e punti |
 | Progetto | File → Salva ora / Esporta | `.terrain-o.json` |
 | Preset | pannelli | JSON |
@@ -1232,15 +1251,18 @@ escono sempre con `provenance: "auto"`, mai `"verified"`.
 ### 18.1 Che cos'è
 
 `.omap` è il formato XML di OpenOrienteering Mapper. Contiene simboli, colori, georeferenziazione
-e oggetti. Terrain / O ne esporta un sottoinsieme: linee, aree, punti e testi con i
-simboli base.
+e oggetti. Terrain / O esporta gli oggetti prodotti dall'editor e allega il set ufficiale
+completo scelto nel progetto: **ISOM 2017-2** (191 simboli) oppure **ISSprOM 2019-2**
+(185 simboli). Le definizioni e le tabelle colori derivano dai set GPL-3.0 di
+OpenOrienteering Mapper; vedi `NOTICE.md`.
 
 ### 18.2 Struttura prodotta
 
 - Dichiarazione XML e versione del formato.
 - note del progetto, avvertenza preliminare, data e scala dichiarata;
 - `<georeferencing>` con punto di riferimento e sistema di riferimento;
-- `<symbols>` con i simboli ISOM semplificati usati;
+- `<colors>` con la tabella colori ufficiale dello standard scelto;
+- `<symbols>` con il set completo (191 ISOM o 185 ISSprOM) e gli stessi ID usati dagli oggetti;
 - `<objects>` con le geometrie in unità 1/1000 mm: origine in alto a sinistra, x verso
   destra e y verso il basso, come i pixel dell'immagine;
 - tag `<t>` con provenienza, stato di verifica, nome, note e ID OSM. La confidenza non
@@ -1260,15 +1282,18 @@ simboli base.
 1. Aprire OOM.
 2. **File → Apri** e selezionare il `.omap`.
 3. Controllare scala e georeferenziazione.
-4. I simboli sono una base ISOM semplificata: controllare resa e scala. Il file dichiara
-   la provenienza sperimentale.
+4. Controllare che lo standard selezionato (ISOM o ISSprOM) corrisponda alla carta che si
+   vuole produrre, poi verificare resa, scala e georeferenziazione. Il file dichiara la
+   provenienza sperimentale.
 
 ### 18.5 Test e regressione
 
 `src/io/exportOmap.test.ts` verifica XML ben formato, riferimento in alto a sinistra,
 coordinate con y positiva come i pixel, presenza dei simboli e assenza di
-`provenance: verified` per feature automatiche. Il test
-`src/io/topologyCheck.test.ts` verifica i controlli topologici.
+`provenance: verified` per feature automatiche. `src/io/omapSymbols.test.ts`
+verifica i codici IOF, il set completo (191/185), gli ID contigui, i colori e la
+corrispondenza tra oggetto e definizione. `src/io/topologyCheck.test.ts` verifica i
+controlli topologici.
 
 ---
 

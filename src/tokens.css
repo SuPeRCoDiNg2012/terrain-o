@@ -1,0 +1,191 @@
+/* ==========================================================================
+   Terrain / O — design tokens
+   Strumento da campo: Olivetti, proporzioni esatte, zero decorazione.
+   Mappa = eroe; interfaccia = cornice. I colori distinguono significati
+   funzionali, non decorano. Il dubbio si vede nella forma, non nel colore.
+   Imported last from main.tsx so it overrides the legacy :root palettes.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* === Base ink === */
+  --ink-900: #0b0e11;
+  --ink-800: #12161a;
+  --ink-700: #1a1f25;
+  --ink-600: #232932;
+  --ink-500: #2e3540;
+  --ink-400: #3f4855;
+  --ink-300: #5a6472;
+  --ink-200: #8b95a1;
+  --ink-100: #c5cbd3;
+  --ink-000: #edeff2;
+
+  /* === Signal — unico accento caldo, chrome only. Mai come simbolo di
+         mappa: là il caldo è il marrone ISOM e il giallo aperto. === */
+  --signal-500: #e4562a;
+  --signal-600: #c94a22;
+  --signal-400: #f07b54;
+  --signal-100: #3d1d10;
+
+  /* === Info — link, stati, hint === */
+  --info-500: #4a9ee8;
+  --info-100: #142839;
+
+  /* === ISOM — colori ufficiali mappa, mai usati come colori UI === */
+  --isom-forest: #2e8b3d;
+  --isom-open: #f5c518;
+  --isom-water: #0075c9;
+  --isom-rock: #6b4226;
+  --isom-rocky: #a0a0a0;
+  --isom-black: #1a1a1a;
+  --isom-white: #ffffff;
+
+  /* === Spacing — griglia 4px === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* === Radius — spigoli vivi: strumento, non giocattolo === */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 0;
+
+  /* === Type === */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --text-display: 28px;
+  --text-h1: 18px;
+  --text-h2: 14px;
+  --text-body: 12px;
+  --text-label: 11px;
+  --text-micro: 10px;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  /* === Motion — nessun rimbalzo, nessuna primavera === */
+  --dur-fast: 150ms;
+  --dur-med: 200ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+  /* === Semantic === */
+  --bg-app: var(--ink-800);
+  --bg-panel: var(--ink-700);
+  --bg-panel-elevated: var(--ink-600);
+  --bg-canvas: var(--ink-900);
+  --border-default: var(--ink-500);
+  --border-subtle: var(--ink-400);
+  --text-primary: var(--ink-100);
+  --text-secondary: var(--ink-200);
+  --text-muted: var(--ink-300);
+  --text-heading: var(--ink-000);
+  --focus-ring: 0 0 0 2px var(--signal-500);
+
+  /* === Provenienza — forma, non colore === */
+  --provenance-auto-stroke: var(--ink-300);
+  --provenance-auto-dash: 4 3;
+  --provenance-manual-stroke: var(--ink-200);
+  --provenance-verified-stroke: var(--signal-500);
+
+  /* === Ombre: quasi assenti. Solo la hairline sotto menu e status. === */
+  --shadow-sm: 0 1px 0 var(--ink-400);
+  --shadow-md: 0 1px 0 var(--ink-400);
+  --shadow-lg: 0 1px 0 var(--ink-400);
+
+  /* ======== Alias legacy (codice esistente, migrazione) ======== */
+  --paper: var(--ink-900);
+  --paper-2: var(--ink-800);
+  --panel: var(--ink-700);
+  --panel-2: var(--ink-800);
+  --line: var(--ink-500);
+  --line-strong: var(--ink-400);
+
+  --ink: var(--ink-100);
+  --ink-soft: var(--ink-100);
+  --muted: var(--ink-200);
+  --faint: var(--ink-200);
+
+  --text: var(--ink-000);
+  --text-dim: var(--ink-100);
+  --text-faint: var(--ink-200);
+
+  --chrome-0: var(--ink-900);
+  --chrome-1: var(--ink-800);
+  --chrome-2: var(--ink-700);
+  --chrome-3: var(--ink-600);
+  --chrome-4: var(--ink-500);
+  --edge: var(--ink-500);
+  --edge-soft: var(--ink-600);
+
+  --accent: var(--signal-500);
+  --accent-strong: var(--signal-600);
+  --accent-soft: var(--signal-100);
+  --accent-ui: var(--signal-500);
+  --accent-ui-hi: var(--signal-400);
+  --select: var(--signal-500);
+  --focus: var(--signal-500);
+
+  --info: var(--info-500);
+  --info-soft: var(--info-100);
+  --source: var(--info-500);
+
+  --verified: var(--signal-400);
+  --verified-soft: var(--signal-100);
+  --auto: var(--ink-200);
+  --auto-soft: var(--ink-600);
+
+  /* Funzionali: significati, non decorazione. */
+  --ochre: #d7ab68;
+  --warning: #e0b264;
+  --warning-soft: #332a1a;
+  --danger: #e28378;
+  --danger-soft: #34201e;
+
+  --radius: 2px;
+  --font: var(--font-sans);
+  --mono: var(--font-mono);
+
+  /* === Alias deprecati --paper-* (ponte di migrazione) === */
+  --paper-bg: var(--bg-app);
+  --paper-surface: var(--bg-panel);
+  --paper-ink: var(--text-primary);
+  --paper-muted: var(--text-muted);
+  --paper-border: var(--border-default);
+}
+
+/* === Tipografia di base ============================================== */
+body,
+input,
+button,
+select,
+textarea {
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1, 'cv02' 1, 'cv03' 1, 'cv11' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mono,
+code,
+pre,
+.coordinates,
+.value,
+.stat {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: normal;
+}
+
+h2 {
+  font-size: var(--text-h1);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+a {
+  color: var(--signal-400);
+}

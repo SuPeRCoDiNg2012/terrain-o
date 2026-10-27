@@ -226,6 +226,7 @@ const projectSchema = z.object({
   imageBBox: bboxSchema.nullable(),
   calibration: calibrationSchema.nullable(),
   printScale: z.number().int().positive(),
+  mapStandard: z.enum(['isom', 'issprom']).default('isom'),
   orientation: z.literal('source'),
   showNorth: z.boolean(),
   classification: classificationSchema.nullable(),
@@ -309,6 +310,7 @@ export function normalizeProjectInput(input: unknown): {
   project.imageBBox ??= null;
   project.calibration ??= null;
   project.printScale ||= 15000;
+  project.mapStandard = project.mapStandard === 'issprom' ? 'issprom' : 'isom';
   project.orientation = 'source';
   project.showNorth ??= true;
   project.classification ??= null;

@@ -1,4 +1,54 @@
 import type { CSSProperties } from 'react';
+import {
+  BookOpen,
+  BoxSelect,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  CircleDot,
+  Compass,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  Focus,
+  GripVertical,
+  Grid3x3,
+  Hand,
+  History,
+  Image,
+  Info,
+  Layers,
+  Lasso,
+  Map,
+  Menu,
+  TriangleAlert,
+  MousePointer2,
+  Mountain,
+  MoreHorizontal,
+  Pentagon,
+  Pipette,
+  Plus,
+  Minus,
+  Redo2,
+  RefreshCw,
+  Route,
+  Ruler,
+  Scan,
+  Search,
+  ShieldCheck,
+  Spline,
+  Trash2,
+  Type,
+  Undo2,
+  Upload,
+  Wand2,
+  X,
+  ZoomIn,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 export type IconName =
   | 'select'
@@ -53,61 +103,61 @@ export type IconName =
   | 'more';
 
 /**
- * Semantic names used by the editor mapped to the Material Symbols glyph
- * names. The font is subset to exactly these glyphs (see /public/fonts), so
- * the bundle stays tiny and works offline.
+ * Semantic editor names mapped to Lucide line icons: 24x24 grid, stroke
+ * 1.5px, round caps — precise, never playful. The font-based icon set is
+ * gone; this renders real SVG so weight and colour follow currentColor.
  */
-const glyphs: Record<IconName, string> = {
-  select: 'arrow_selector_tool',
-  pan: 'pan_tool',
-  area: 'pentagon',
-  line: 'polyline',
-  point: 'radio_button_checked',
-  calibrate: 'straighten',
-  undo: 'undo',
-  redo: 'redo',
-  fit: 'fit_screen',
-  plus: 'add',
-  minus: 'remove',
-  trash: 'delete',
-  copy: 'content_copy',
-  image: 'image',
-  wand: 'auto_fix_high',
-  map: 'map',
-  mountain: 'landscape',
-  route: 'route',
-  check: 'check',
-  alert: 'warning',
-  info: 'info',
-  x: 'close',
-  up: 'expand_less',
-  down: 'expand_more',
-  left: 'chevron_left',
-  right: 'chevron_right',
-  import: 'download',
-  export: 'upload',
-  help: 'menu_book',
-  menu: 'menu',
-  layers: 'layers',
-  search: 'search',
-  eye: 'visibility',
-  eyeOff: 'visibility_off',
-  shield: 'verified_user',
-  compass: 'explore',
-  chevronDown: 'expand_more',
-  chevronRight: 'chevron_right',
-  grip: 'drag_indicator',
-  refresh: 'refresh',
-  marquee: 'crop_free',
-  lasso: 'gesture',
-  zoom: 'zoom_in',
-  eyedropper: 'colorize',
-  text: 'title',
-  ruler: 'square_foot',
-  grid: 'grid_on',
-  history: 'history',
-  navigator: 'center_focus_strong',
-  more: 'more_horiz',
+const glyphs: Record<IconName, LucideIcon> = {
+  select: MousePointer2,
+  pan: Hand,
+  area: Pentagon,
+  line: Spline,
+  point: CircleDot,
+  calibrate: Ruler,
+  undo: Undo2,
+  redo: Redo2,
+  fit: Scan,
+  plus: Plus,
+  minus: Minus,
+  trash: Trash2,
+  copy: Copy,
+  image: Image,
+  wand: Wand2,
+  map: Map,
+  mountain: Mountain,
+  route: Route,
+  check: Check,
+  alert: TriangleAlert,
+  info: Info,
+  x: X,
+  up: ChevronUp,
+  down: ChevronDown,
+  left: ChevronLeft,
+  right: ChevronRight,
+  import: Download,
+  export: Upload,
+  help: BookOpen,
+  menu: Menu,
+  layers: Layers,
+  search: Search,
+  eye: Eye,
+  eyeOff: EyeOff,
+  shield: ShieldCheck,
+  compass: Compass,
+  chevronDown: ChevronDown,
+  chevronRight: ChevronRight,
+  grip: GripVertical,
+  refresh: RefreshCw,
+  marquee: BoxSelect,
+  lasso: Lasso,
+  zoom: ZoomIn,
+  eyedropper: Pipette,
+  text: Type,
+  ruler: Ruler,
+  grid: Grid3x3,
+  history: History,
+  navigator: Focus,
+  more: MoreHorizontal,
 };
 
 interface IconProps {
@@ -118,14 +168,15 @@ interface IconProps {
 }
 
 export function Icon({ name, size = 20, className, style }: IconProps) {
+  const Component = glyphs[name];
   return (
     <span
-      className={`material-symbols-rounded icon ${className ?? ''}`.trim()}
-      style={{ fontSize: size, width: size, height: size, ...style }}
+      className={`icon ${className ?? ''}`.trim()}
+      style={{ width: size, height: size, ...style }}
       aria-hidden="true"
       data-icon={name}
     >
-      {glyphs[name]}
+      <Component size={size} strokeWidth={1.5} />
     </span>
   );
 }

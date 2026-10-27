@@ -1,6 +1,27 @@
 import { create } from 'zustand';
 import type { Point } from '../model/types';
 
+export type UiMode = 'essential' | 'advanced';
+
+export const UI_MODE_KEY = 'terrain-o/ui-mode/v1';
+
+function readUiMode(): UiMode {
+  if (typeof localStorage === 'undefined') return 'essential';
+  try {
+    return localStorage.getItem(UI_MODE_KEY) === 'advanced' ? 'advanced' : 'essential';
+  } catch {
+    return 'essential';
+  }
+}
+
+function persistUiMode(mode: UiMode): void {
+  try {
+    localStorage.setItem(UI_MODE_KEY, mode);
+  } catch {
+    // A blocked storage must not change how the editor behaves.
+  }
+}
+
 export interface VectorPreviewRegion {
   type: string;
   coords: Point[];
@@ -29,6 +50,8 @@ export interface SampledColor {
 }
 
 interface UiStore {
+  mode: UiMode;
+  setMode: (mode: UiMode) => void;
   cursor: CursorInfo | null;
   setCursor: (cursor: CursorInfo | null) => void;
   leftOpen: boolean;
@@ -47,6 +70,11 @@ interface UiStore {
 }
 
 export const useUiStore = create<UiStore>((set) => ({
+  mode: readUiMode(),
+  setMode: (mode) => {
+    persistUiMode(mode);
+    set({ mode });
+  },
   cursor: null,
   setCursor: (cursor) => set({ cursor }),
   leftOpen: false,

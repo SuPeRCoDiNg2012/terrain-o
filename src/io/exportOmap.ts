@@ -10,6 +10,14 @@ import {
 import { metersPerPixel, pixelToWgs84 } from '../geo/projection';
 import { pixelToWorld, worldFileUnits } from '../geo/worldfile';
 import { assertProjectTopology } from './topologyCheck';
+import type { MapStandard } from '../model/types';
+import { exportSymbolCodes, projectStandard } from '../model/mapSymbols';
+import {
+  ISOM_SYMBOL_SET,
+  ISSPROM_SYMBOL_SET,
+  type OmapSymbolDefinition,
+  type OmapSymbolSet,
+} from './omapSymbolSets';
 
 function esc(value: string): string {
   return value
@@ -23,107 +31,28 @@ function round(value: number): number {
   return Math.round(value);
 }
 
-const SYMBOL_IDS = {
-  water: 0,
-  open: 1,
-  vegetation: 2,
-  building: 3,
-  artificial: 4,
-  road: 5,
-  path: 6,
-  stream: 7,
-  fence: 8,
-  start: 9,
-  control: 10,
-  finish: 11,
-  controlNumber: 12,
-  contour: 13,
-  indexContour: 14,
-  tree: 15,
-} as const;
-
-const AREA_SYMBOL: Record<string, number> = {
-  forest: SYMBOL_IDS.vegetation,
-  thicket: SYMBOL_IDS.vegetation,
-  open: SYMBOL_IDS.open,
-  water: SYMBOL_IDS.water,
-  building: SYMBOL_IDS.building,
-  artificial: SYMBOL_IDS.artificial,
+const OMAP_SETS: Record<MapStandard, OmapSymbolSet> = {
+  isom: ISOM_SYMBOL_SET,
+  issprom: ISSPROM_SYMBOL_SET,
 };
 
-const LINE_SYMBOL: Record<string, number> = {
-  path: SYMBOL_IDS.path,
-  road: SYMBOL_IDS.road,
-  stream: SYMBOL_IDS.stream,
-  fence: SYMBOL_IDS.fence,
+const OMAP_BY_CODE: Record<MapStandard, Map<string, OmapSymbolDefinition>> = {
+  isom: new Map(ISOM_SYMBOL_SET.symbols.map((symbol) => [symbol.code, symbol])),
+  issprom: new Map(ISSPROM_SYMBOL_SET.symbols.map((symbol) => [symbol.code, symbol])),
 };
 
-const POINT_SYMBOL: Record<string, number> = {
-  start: SYMBOL_IDS.start,
-  control: SYMBOL_IDS.control,
-  finish: SYMBOL_IDS.finish,
-  tree: SYMBOL_IDS.tree,
-};
-
-const COLORS = [
-  { name: 'Nero', c: 0, m: 0, y: 0, k: 1, r: 0, g: 0, b: 0, spot: '<namedcolor>BLACK</namedcolor>' },
-  { name: 'Verde vegetazione', c: 0.62, m: 0, y: 0.86, k: 0.2, r: 0.18, g: 0.49, b: 0.2, spot: '<namedcolor>GREEN</namedcolor>' },
-  { name: 'Giallo terreno aperto', c: 0, m: 0.15, y: 0.68, k: 0.1, r: 0.91, g: 0.78, b: 0.3, spot: '<namedcolor>YELLOW</namedcolor>' },
-  { name: 'Blu acqua', c: 0.76, m: 0.38, y: 0, k: 0.31, r: 0.17, g: 0.42, b: 0.69, spot: '<namedcolor>BLUE</namedcolor>' },
-  { name: 'Marrone curve', c: 0, m: 0.36, y: 0.69, k: 0.45, r: 0.55, g: 0.35, b: 0.17, spot: '<namedcolor>BROWN</namedcolor>' },
-  { name: 'Viola percorso', c: 0.39, m: 0.83, y: 0, k: 0.19, r: 0.49, g: 0.13, b: 0.81, spot: '<namedcolor>PURPLE</namedcolor>' },
-  { name: 'Grigio edifici', c: 0, m: 0, y: 0, k: 0.42, r: 0.58, g: 0.58, b: 0.58, spot: '<component factor="0.42" spotcolor="0"/>' },
-  { name: 'Bianco', c: 0, m: 0, y: 0, k: 0, r: 1, g: 1, b: 1, spot: '<component factor="0" spotcolor="0"/>' },
-];
-
-function lineSymbol(params: {
-  color: number;
-  width: number;
-  dashed?: boolean;
-  minimumLength?: number;
-  dashLength?: number;
-  breakLength?: number;
-  borders?: boolean;
-}): string {
-  const dashed = params.dashed ? ' dashed="true"' : '';
-  const borders = params.borders
-    ? '<borders><border color="0" width="120" shift="60"/></borders>'
-    : '';
-  return `<line_symbol color="${params.color}" line_width="${params.width}" minimum_length="${params.minimumLength ?? 0}" join_style="1" cap_style="0" start_offset="0" end_offset="0"${dashed} segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="${params.dashLength ?? 4000}" break_length="${params.breakLength ?? 1000}" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0">${borders}</line_symbol>`;
+function symbolDefinition(standard: MapStandard, code: string): OmapSymbolDefinition {
+  const symbol = OMAP_BY_CODE[standard].get(code);
+  if (!symbol) throw new Error(`Simbolo ${code} assente nel set ${OMAP_SETS[standard].label}.`);
+  return symbol;
 }
 
-function symbolDefinitions(): string {
-  return [
-    `<symbol type="4" id="0" code="301" name="Acqua"><description>Area acquea. Bozza preliminare, non verificata automaticamente.</description><area_symbol inner_color="3" min_area="0" patterns="0"/></symbol>`,
-    `<symbol type="4" id="1" code="310" name="Terreno aperto"><description>Terreno aperto indicativo.</description><area_symbol inner_color="2" min_area="0" patterns="0"/></symbol>`,
-    `<symbol type="4" id="2" code="410" name="Vegetazione fitta"><description>Vegetazione: simbolo ISOM 410. La percorribilità non è dichiarata.</description><area_symbol inner_color="1" min_area="0" patterns="0"/></symbol>`,
-    `<symbol type="4" id="3" code="521" name="Edificio"><description>Edificio.</description><area_symbol inner_color="6" min_area="0" patterns="0"/></symbol>`,
-    `<symbol type="4" id="4" code="501" name="Superficie artificiale"><description>Superficie pavimentata o artificiale.</description><area_symbol inner_color="6" min_area="0" patterns="0"/></symbol>`,
-    `<symbol type="2" id="5" code="502" name="Strada"><description>Strada. Simbolo semplificato.</description>${lineSymbol({ color: 0, width: 300, borders: true })}</symbol>`,
-    `<symbol type="2" id="6" code="505" name="Sentiero"><description>Sentiero. Simbolo semplificato.</description>${lineSymbol({ color: 0, width: 140, dashed: true, dashLength: 2000, breakLength: 800 })}</symbol>`,
-    `<symbol type="2" id="7" code="304" name="Ruscello"><description>Corso d'acqua attraversabile.</description>${lineSymbol({ color: 3, width: 160 })}</symbol>`,
-    `<symbol type="2" id="8" code="516" name="Recinzione"><description>Recinzione.</description>${lineSymbol({ color: 0, width: 100, dashed: true, dashLength: 1200, breakLength: 500 })}</symbol>`,
-    `<symbol type="1" id="9" code="701" name="Partenza"><point_symbol rotatable="true" inner_radius="2000" inner_color="-1" outer_width="0" outer_color="-1" elements="1"><element><symbol type="2" code=""><line_symbol color="5" line_width="350" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" segment_length="3429" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="3429" break_length="857" dashes_in_group="1" in_group_break_length="429" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol><object type="1"><coords count="4">-2697 1557;0 -3114;2697 1557;-2697 1557 18;</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object></element></point_symbol></symbol>`,
-    `<symbol type="1" id="10" code="703" name="Controllo"><point_symbol inner_radius="2325" inner_color="-1" outer_width="350" outer_color="5" elements="0"/></symbol>`,
-    `<symbol type="1" id="11" code="706" name="Arrivo"><point_symbol inner_radius="1825" inner_color="-1" outer_width="350" outer_color="5" elements="1"><element><symbol type="1" code=""><point_symbol inner_radius="2825" inner_color="-1" outer_width="350" outer_color="5" elements="0"/></symbol><object type="0"><coords count="1">0 0;</coords></object></element></point_symbol></symbol>`,
-    `<symbol type="8" id="12" code="704" name="Numero controllo"><text_symbol icon_text="5"><font family="Sans Serif" size="5588"/><text color="5" line_spacing="1" paragraph_spacing="0" character_spacing="0" kerning="true"/></text_symbol></symbol>`,
-    `<symbol type="2" id="13" code="101" name="Curva di livello"><line_symbol color="4" line_width="140" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="4000" break_length="1000" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol>`,
-    `<symbol type="2" id="14" code="101.1" name="Curva direttrice"><line_symbol color="4" line_width="250" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="4000" break_length="1000" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol>`,
-    `<symbol type="1" id="15" code="" name="Albero isolato"><description>Albero isolato rilevato automaticamente. Simbolo semplificato, non verificato.</description><point_symbol inner_radius="1400" inner_color="1" outer_width="120" outer_color="0" elements="0"/></symbol>`,
-  ].join('\n');
-}
-
-function colorTable(): string {
-  return COLORS.map(
-    (color, index) =>
-      `<color priority="${index}" name="${esc(color.name)}" c="${color.c}" m="${color.m}" y="${color.y}" k="${color.k}" opacity="1"><spotcolors>${color.spot}</spotcolors><cmyk method="custom"/><rgb method="cmyk" r="${color.r}" g="${color.g}" b="${color.b}"/></color>`,
-  ).join('\n');
-}
-
-function objectTags(feature: Feature): string {
+function objectTags(feature: Feature, code?: string, role?: string): string {
   const tags = [
     `<t k="terrain-o:stato">${feature.verified ? 'verificato' : 'non verificato'}</t>`,
     `<t k="terrain-o:fonte">${esc(feature.source ?? 'manual')}</t>`,
+    code ? `<t k="terrain-o:simbolo">${esc(code)}</t>` : '',
+    role ? `<t k="terrain-o:ruolo">${esc(role)}</t>` : '',
     feature.name ? `<t k="terrain-o:nome">${esc(feature.name)}</t>` : '',
     feature.notes ? `<t k="terrain-o:nota">${esc(feature.notes)}</t>` : '',
     feature.verifiedNote ? `<t k="terrain-o:nota-verifica">${esc(feature.verifiedNote)}</t>` : '',
@@ -276,31 +205,51 @@ function ringCoords(ring: Point[], ctx: BuildContext, closeFlag = FLAG_CLOSE): s
   return `${body}${coordText(ring[0], ctx, closeFlag)}`;
 }
 
-function objectXml(feature: Feature, ctx: BuildContext): string | null {
-  if (!feature.coords.length) return null;
-  const tags = objectTags(feature);
+function objectXmls(feature: Feature, ctx: BuildContext, standard: MapStandard): string[] {
+  if (!feature.coords.length) return [];
+  const codes = exportSymbolCodes(feature.type, standard);
+  if (!codes.length) return [];
+  const primary = symbolDefinition(standard, codes[0]);
+  const tags = objectTags(feature, codes[0]);
+
   if (feature.kind === 'area') {
-    const symbol = AREA_SYMBOL[feature.type];
-    if (symbol == null) return null;
     const rings = [feature.coords, ...(feature.holes ?? [])];
     const coords = rings
       .map((ring, index) => ringCoords(ring, ctx, index === 0 ? FLAG_CLOSE : FLAG_CLOSE_HOLE))
       .join('');
     const count = rings.reduce((sum, ring) => sum + ring.length + 1, 0);
-    return `<object type="1" symbol="${symbol}">${tags}<coords count="${count}">${coords}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`;
+    const objects = [
+      `<object type="1" symbol="${primary.id}">${tags}<coords count="${count}">${coords}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`,
+    ];
+    // Water, paved areas and sprint buildings are combined symbols in OOM.
+    // We keep the fill and the edge as two independent objects so the fill can
+    // carry holes without making the outline a hole as well.
+    for (const code of codes.slice(1)) {
+      const companion = symbolDefinition(standard, code);
+      for (const ring of rings) {
+        if (ring.length < 2) continue;
+        const ringTags = objectTags(feature, code, 'contorno');
+        objects.push(
+          `<object type="1" symbol="${companion.id}">${ringTags}<coords count="${ring.length + 1}">${ringCoords(ring, ctx, FLAG_CLOSE)}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`,
+        );
+      }
+    }
+    return objects;
   }
+
   if (feature.kind === 'line') {
-    const symbol = LINE_SYMBOL[feature.type];
-    if (symbol == null) return null;
     const coords = feature.coords.map((point) => coordText(point, ctx)).join('');
-    return `<object type="1" symbol="${symbol}">${tags}<coords count="${feature.coords.length}">${coords}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`;
+    return [
+      `<object type="1" symbol="${primary.id}">${tags}<coords count="${feature.coords.length}">${coords}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`,
+    ];
   }
-  const symbol = POINT_SYMBOL[feature.type];
-  if (symbol == null) return null;
-  return `<object type="0" symbol="${symbol}">${tags}<coords count="1">${coordText(feature.coords[0], ctx)}</coords></object>`;
+
+  return [
+    `<object type="0" symbol="${primary.id}">${tags}<coords count="1">${coordText(feature.coords[0], ctx)}</coords></object>`,
+  ];
 }
 
-function contourObjects(project: Project, ctx: BuildContext): string[] {
+function contourObjects(project: Project, ctx: BuildContext, standard: MapStandard): string[] {
   return project.contours
     .filter((contour) => contour.coords.length >= 2)
     .map((contour) => {
@@ -308,19 +257,21 @@ function contourObjects(project: Project, ctx: BuildContext): string[] {
         ? `${contour.coords.map((p) => coordText(p, ctx)).join('')}${coordText(contour.coords[0], ctx, FLAG_CLOSE)}`
         : contour.coords.map((p) => coordText(p, ctx)).join('');
       const count = contour.coords.length + (contour.closed ? 1 : 0);
-      const symbol = contour.index ? SYMBOL_IDS.indexContour : SYMBOL_IDS.contour;
-      return `<object type="1" symbol="${symbol}"><coords count="${count}">${coords}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`;
+      const symbol = symbolDefinition(standard, contour.index ? '102' : '101');
+      const tags = `<tags><t k="terrain-o:fonte">dem</t><t k="terrain-o:simbolo">${contour.index ? '102' : '101'}</t><t k="terrain-o:stato">non verificato</t></tags>`;
+      return `<object type="1" symbol="${symbol.id}">${tags}<coords count="${count}">${coords}</coords><pattern rotation="0"><coord x="0" y="0"/></pattern></object>`;
     });
 }
 
-function controlLabels(project: Project, ctx: BuildContext): string[] {
+function controlLabels(project: Project, ctx: BuildContext, standard: MapStandard): string[] {
+  const symbol = symbolDefinition(standard, '704');
   const labels: string[] = [];
   for (const feature of project.features) {
     if (feature.type !== 'control' || !feature.code) continue;
     const x = round(feature.coords[0].x * ctx.unitsPerPixel + 5000);
     const y = round(feature.coords[0].y * ctx.unitsPerPixel + 1500);
     labels.push(
-      `<object type="4" symbol="${SYMBOL_IDS.controlNumber}" h_align="0" v_align="2"><coords count="1">${x} ${y};</coords><text>${esc(feature.code)}</text></object>`,
+      `<object type="4" symbol="${symbol.id}" h_align="0" v_align="2"><coords count="1">${x} ${y};</coords><text>${esc(feature.code)}</text></object>`,
     );
   }
   return labels;
@@ -332,11 +283,11 @@ export function exportProjectOmap(project: Project, _images?: RenderImages): str
   const mp = metersPerPixel(project);
   const mmPerPixel = mp ? (mp * 1000) / project.printScale : 0.1;
   const ctx: BuildContext = { unitsPerPixel: mmPerPixel * 1000 };
-  const featureObjects = project.features
-    .map((feature) => objectXml(feature, ctx))
-    .filter((value): value is string => Boolean(value));
-  const contourObj = contourObjects(project, ctx);
-  const labels = controlLabels(project, ctx);
+  const standard = projectStandard(project);
+  const symbolSet = OMAP_SETS[standard];
+  const featureObjects = project.features.flatMap((feature) => objectXmls(feature, ctx, standard));
+  const contourObj = contourObjects(project, ctx, standard);
+  const labels = controlLabels(project, ctx, standard);
   const allObjects = [...featureObjects, ...contourObj, ...labels];
   const verified = project.features.filter((feature) => feature.verified).length;
   const attribution: string[] = [];
@@ -354,7 +305,7 @@ export function exportProjectOmap(project: Project, _images?: RenderImages): str
     `Elementi: ${project.features.length}; verificati sul campo: ${verified}; non verificati: ${project.features.length - verified}.`,
     'Gli elementi automatici (OSM, classificazione, DEM) sono sperimentali e non verificati.',
     attribution.length ? attribution.join(' · ') : '',
-    'Simboli ISOM 2017-2 semplificati: 301, 310, 410, 501, 502, 505, 521, 304, 516, 701, 703, 704, 706, 101.',
+    `Standard simboli: ${symbolSet.label}; definizioni ufficiali OpenOrienteering Mapper (${symbolSet.symbols.length} simboli inclusi).`,
     'Apertura prevista in OpenOrienteering Mapper 0.9.x; l’apertura e la resa dei simboli vanno verificate manualmente prima dell’uso.',
     project.imageBBox
       ? `Georeferenziazione: ${project.projectionSource}; bbox WGS84 ${project.imageBBox.west.toFixed(6)}, ${project.imageBBox.south.toFixed(6)} – ${project.imageBBox.east.toFixed(6)}, ${project.imageBBox.north.toFixed(6)}.`
@@ -367,12 +318,10 @@ export function exportProjectOmap(project: Project, _images?: RenderImages): str
 <map xmlns="http://openorienteering.org/apps/mapper/xml/v2" version="9">
 <notes>${esc(notes)}</notes>
 ${buildGeoreferencing(project)}
-<colors count="${COLORS.length}">
-${colorTable()}
-</colors>
+${symbolSet.colors}
 <barrier version="6" required="0.6.0">
-<symbols count="16" id="Terrain / O — base ISOM semplificata">
-${symbolDefinitions()}
+<symbols count="${symbolSet.symbols.length}" id="Terrain / O — ${esc(symbolSet.label)}">
+${symbolSet.symbols.map((symbol) => symbol.xml).join('\n')}
 </symbols>
 <parts count="1" current="0">
 <part name="Bozza preliminare"><objects count="${allObjects.length}">
@@ -399,9 +348,10 @@ export function omapDebugInfo(project: Project): {
   if (!project.image) throw new Error('Nessuna immagine.');
   const mp = metersPerPixel(project);
   const mmPerPixel = mp ? (mp * 1000) / project.printScale : 0.1;
+  const standard = projectStandard(project);
   return {
     unitsPerPixel: mmPerPixel * 1000,
-    symbolCount: 16,
+    symbolCount: OMAP_SETS[standard].symbols.length,
     objectCount: project.features.length,
     typeCounts: project.features.reduce<Record<string, number>>((acc, feature) => {
       acc[feature.type] = (acc[feature.type] ?? 0) + 1;

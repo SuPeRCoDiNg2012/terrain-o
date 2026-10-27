@@ -16,9 +16,9 @@ export interface ProvenanceStyle {
 }
 
 export const PROVENANCE_STYLES: Record<ProvenanceLevel, ProvenanceStyle> = {
-  auto: { color: '#93a1b1', width: 1.05, dashed: true, check: false },
-  manual: { color: '#9aa7b5', width: 1.15, dashed: false, check: false },
-  verified: { color: '#9aa7b5', width: 1.15, dashed: false, check: true },
+  auto: { color: '#5a6472', width: 1, dashed: true, check: false },
+  manual: { color: '#8b95a1', width: 1, dashed: false, check: false },
+  verified: { color: '#e4562a', width: 1, dashed: false, check: true },
 };
 
 export function featureProvenance(feature: Pick<Feature, 'verified' | 'source'>): ProvenanceLevel {
@@ -54,7 +54,7 @@ export function drawProvenanceCheck(
   ctx: CanvasRenderingContext2D,
   corner: Point,
   unit: number,
-  color = '#8aa694',
+  color = '#e4562a',
 ): void {
   const size = 4.6 * unit;
   const box = 11 * unit;

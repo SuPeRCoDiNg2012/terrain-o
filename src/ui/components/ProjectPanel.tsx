@@ -40,6 +40,7 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
   const saveError = useProjectStore((state) => state.saveError);
   const setStorage = useProjectStore((state) => state.setStorage);
   const setPrintScale = useProjectStore((state) => state.setPrintScale);
+  const setMapStandard = useProjectStore((state) => state.setMapStandard);
   const setShowNorth = useProjectStore((state) => state.setShowNorth);
   const setName = useProjectStore((state) => state.setName);
   const clearCalibration = useProjectStore((state) => state.clearCalibration);
@@ -310,7 +311,23 @@ export function ProjectPanel({ onOpenFilePicker, onImportProjectFile, onOpenExpo
               {PRINT_SCALES.map((scale) => <option key={scale} value={scale}>1:{scale}</option>)}
             </select>
           </div>
+          <div className="field">
+            <label className="field-label" htmlFor="map-standard">{t('Standard carta')}</label>
+            <select
+              id="map-standard"
+              className="select-input"
+              data-testid="map-standard"
+              value={project.mapStandard ?? 'isom'}
+              onChange={(event) => setMapStandard(event.target.value === 'issprom' ? 'issprom' : 'isom')}
+            >
+              <option value="isom">ISOM 2017-2 · foresta</option>
+              <option value="issprom">ISSprOM 2019-2 · sprint</option>
+            </select>
+          </div>
         </div>
+        <p className="tiny muted">
+          {t('I codici e le geometrie dei simboli cambiano con lo standard; l’export .omap usa le definizioni ufficiali corrispondenti.')}
+        </p>
         <Toggle
           label={t('Mostra freccia nord')}
           checked={project.showNorth}

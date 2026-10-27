@@ -2,7 +2,7 @@
 
 Editor desktop e mobile per **bozze preliminari di mappe di orienteering** a partire da ortofoto georeferenziate.
 
-> **BOZZA PRELIMINARE — non atta alla gara.**
+> **Bozza preliminare — non atta alla gara.**
 > Terrain / O non dichiara percorribilità, vegetazione sotto copertura, sicurezza del terreno,
 > quota di precisione, nord geografico verificato o conformità IOF. Ogni interpretazione
 > automatica è materia prima sperimentale finché una persona non la verifica sul campo.
@@ -33,8 +33,8 @@ Comandi di qualità:
 ```bash
 npm run typecheck
 npm run lint
-npm test             # Vitest, 112 test
-npx playwright test  # 13 test end-to-end (desktop + mobile + lingua + AI + auto + OSM + WCAG AA)
+npm test             # Vitest, 120 test
+npx playwright test  # 19 test end-to-end (essenziale + desktop + mobile + lingua + AI + auto + OSM + simboli + WCAG AA)
 npm run check        # lint + typecheck + test + build
 ```
 
@@ -46,8 +46,12 @@ I browser Playwright vanno installati una volta con `npx playwright install chro
 
 ### Interfaccia
 
-- Shell desktop professionale: menu bar, options bar contestuale, palette strumenti,
-  canvas raster + overlay SVG, dock laterali/inferiore, status bar.
+- **Modalità essenziale predefinita**: mappa a tutta finestra con solo **Carica**,
+  **Esegui tutto** ed **Esporta**. Tutto il resto si apre da **Modalità avanzata** e si
+  richiude da **Essenziale**; la scelta è persistita in `localStorage`
+  (`terrain-o/ui-mode/v1`).
+- Shell desktop completa (modalità avanzata): menu bar, options bar contestuale, palette
+  strumenti, canvas raster + overlay SVG, dock laterali/inferiore, status bar.
 - Pannelli agganciabili e trascinabili: Progetto, OSM, DEM, Percorso, Livelli, Elementi,
   Proprietà, Classificazione, Vettorizzazione, Riconoscimento AI, Storia, Info, Navigatore.
 - Layout persistito in `localStorage` (`terrain-o/ui-layout/v1`) e ripristinabile da
@@ -212,10 +216,33 @@ anteprima live, validazione topologica, preset e applicazione come livelli autom
 GeoJSON e OMAP eseguono un pre-check topologico e bloccano l'export indicando la feature
 problematica.
 
+### Simboli IOF e standard carta
+
+Il pannello **Progetto → Scala e stampa** espone **Standard carta**:
+**ISOM 2017-2** per la foresta e **ISSprOM 2019-2** per lo sprint. Il selettore
+cambia i codici, le geometrie e i colori dei simboli usati da canvas, legenda,
+Inspector ed export `.omap`; non è un'etichetta cosmetica.
+
+I codici sono quelli delle specifiche IOF e delle definizioni ufficiali di
+OpenOrienteering Mapper: bosco **405**, terreno aperto **401**, vegetazione
+fitta **410**, acqua **301** (fill **301.1** + sponda **301.4** in ISOM,
+**301.6** in ISSprOM), edificio **521** (**521.3** + **521.4** in ISSprOM),
+superficie pavimentata **501**, strada **503** (ISSprOM **501.17**), sentiero
+**505** (ISSprOM **505.1**), ruscello **304** (ISSprOM **305**), recinzione
+**516**, albero isolato **417**, partenza **701**, controllo **703**, arrivo
+**706**, numero controllo **704**, curva **101**, direttrice **102**.
+L'export include il set completo: **191 simboli ISOM** oppure **185 simboli
+ISSprOM**, con le rispettive tabelle colori ufficiali, così Mapper apre la
+mappa con l'intera palette e non con una base ridotta. Acqua, superfici
+pavimentate ed edifici sprint sono esportati come riempimento + bordo
+complementare, così i fori restano corretti. Le definizioni sono
+derivate dai set GPL-3.0 di OpenOrienteering Mapper: vedi [NOTICE.md](NOTICE.md).
+
 ### Export
 
 - PNG 1×/2×/3×, SVG vettoriale, PDF A4/A3.
-- OMAP/OpenOrienteering Mapper XML v9 con simboli ISOM semplificati.
+- OMAP/OpenOrienteering Mapper XML v9 con set ufficiali ISOM 2017-2 o
+  ISSprOM 2019-2, selezionabile nel progetto.
 - GeoJSON (WGS84 se georeferenziato, altrimenti pixel con metadati espliciti).
 - GPX del percorso e KML, solo con georeferenziazione WGS84.
 - Progetto `.terrain-o.json` con immagine, classificazione, feature e cronologia.
@@ -232,7 +259,7 @@ verticalmente ribaltata: ora un test unitario e un test E2E bloccano la regressi
 
 ```text
 src/
-  model/          tipi Zod, costanti ISOM, feature, progetto
+  model/          tipi Zod, costanti ISOM, catalogo simboli, feature, progetto
   store/          Zustand: progetto, vista, selezione, undo/redo, job
   geo/            world file, proiezioni proj4, pixel ↔ WGS84, aree/distanze
   io/             import/export progetto, OMAP, GeoJSON, SVG, PNG, PDF, GPX/KML
@@ -273,11 +300,11 @@ per la classificazione e risalite in coordinate immagine.
 
 ## 5. Test
 
-- `npm test`: **112 test** su 19 file (classificazione, scene golden, vettorizzazione,
+- `npm test`: **120 test** su 20 file (classificazione, scene golden, vettorizzazione,
   integrazione pipeline, property-based fast-check, random forest, rilevamento alberi,
   etichette AI, orchestrazione automatica, fusione simboli, schema progetto, OSM e fusione,
-  OMAP, pre-check topologico, riparazione IndexedDB, benchmark).
-- `npx playwright test`: **13 test E2E**:
+  OMAP/IOF, pre-check topologico, riparazione IndexedDB, benchmark).
+- `npx playwright test`: **19 test E2E**:
   1. shell desktop, avvertenza bozza, assenza di marker `?`, legenda spenta;
   2. menu desktop, comandi e navigazione da tastiera;
   3. finestra ridotta e cambio lingua IT/EN persistito dopo il reload;
@@ -289,8 +316,9 @@ per la classificazione e risalite in coordinate immagine.
   9. pipeline automatica con OSM simulato → edificio e albero importati e unificati;
   10. verifica dichiarata → modifica geometria → revoca automatica → undo;
   11. import → disegno area → export OMAP con riferimento in alto a sinistra e y positiva;
-  12. shell mobile: riconoscimento telefono, menu a foglio, drawer, rail strumenti;
-  13. audit WCAG AA con axe su shell, pannelli principali e finestra Esporta.
+  12. cambio a ISSprOM → export con set sprint completo (185 simboli, sentiero 505.1);
+  13. shell mobile: riconoscimento telefono, menu a foglio, drawer, rail strumenti;
+  14. audit WCAG AA con axe su shell, pannelli principali e finestra Esporta.
 - `npm run typecheck`, `npm run lint`, `npm run build`: puliti.
 
 ---
@@ -302,8 +330,10 @@ per la classificazione e risalite in coordinate immagine.
 - OSM: Overpass (due mirror globali) con fallback all'API OSM ufficiale; cache 24 h in IndexedDB;
   edifici, land cover, acqua, viabilità, barriere, ferrovie, alberi e multipoligoni.
 - DEM: AWS Terrain Tiles (Terrarium), quota indicativa.
-- OMAP: XML v9, simboli ISOM semplificati; l'apertura in Mapper 0.9.x va verificata manualmente.
-- OMAP non include i simboli ISOM reali completi (TODO P0 del brief): è una bozza tecnica.
+- OMAP: XML v9 con set ufficiali ISOM 2017-2 (191 simboli) o ISSprOM 2019-2 (185 simboli);
+  l'apertura in Mapper 0.9.x e la resa a stampa vanno comunque verificate manualmente.
+- Il set simboli è completo, ma non ogni classe ISOM viene generata automaticamente: l'editor
+  produce le classi supportate da classificazione, AI, OSM e disegno manuale.
 
 ---
 

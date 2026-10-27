@@ -21,6 +21,9 @@ export interface LayerState {
 
 export type FeatureKind = 'area' | 'line' | 'point';
 
+/** IOF symbol standard used by the map and by the .omap export. */
+export type MapStandard = 'isom' | 'issprom';
+
 export type FeatureSource = 'manual' | 'osm' | 'vector' | 'gpx' | 'dem' | 'ml';
 
 export interface VerificationEvent {
@@ -275,6 +278,8 @@ export interface Project {
   imageBBox: BBox | null;
   calibration: Calibration | null;
   printScale: number;
+  /** Symbol standard; optional so projects saved before the selector still load. */
+  mapStandard?: MapStandard;
   /** We never claim a verified geographic north; only the source orientation. */
   orientation: 'source';
   showNorth: boolean;

@@ -7,10 +7,23 @@ const FIXTURES = path.resolve('e2e/fixtures');
 async function openApp(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('terrain-o:onboarding-v1', 'seen');
+    localStorage.setItem('terrain-o/ui-mode/v1', 'advanced');
     if (!localStorage.getItem('terrain-o/locale/v1')) localStorage.setItem('terrain-o/locale/v1', 'it');
   });
   await page.goto('/');
   await expect(page.getByTestId('app-shell')).toBeVisible();
+}
+
+async function openEssential(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('terrain-o:onboarding-v1', 'seen');
+    // The shared beforeEach opens advanced; this helper explicitly clears the
+    // saved choice so the default essential workspace is exercised.
+    localStorage.removeItem('terrain-o/ui-mode/v1');
+    if (!localStorage.getItem('terrain-o/locale/v1')) localStorage.setItem('terrain-o/locale/v1', 'it');
+  });
+  await page.goto('/');
+  await expect(page.getByTestId('simple-shell')).toBeVisible();
 }
 
 async function importFixture(page: Page) {
@@ -27,9 +40,57 @@ test.describe('Terrain / O desktop shell', () => {
     await openApp(page);
   });
 
+  test('starts in the essential workspace with only load, run and export', async ({ page }) => {
+    await openEssential(page);
+
+    await expect(page.locator('.menu-bar')).toHaveCount(0);
+    await expect(page.locator('.tool-palette')).toHaveCount(0);
+    await expect(page.locator('.dock')).toHaveCount(0);
+    await expect(page.locator('.status-bar-pro')).toHaveCount(0);
+    await expect(page.locator('.simple-actions button')).toHaveCount(3);
+    await expect(page.getByTestId('simple-load')).toBeVisible();
+    await expect(page.getByTestId('simple-run-all')).toBeDisabled();
+    await expect(page.getByTestId('simple-export')).toBeDisabled();
+    await expect(page.getByTestId('enter-advanced')).toBeVisible();
+    await expect(page.locator('.map-stage-minimal')).toBeVisible();
+
+    await page.getByTestId('enter-advanced').click();
+    await expect(page.locator('.status-bar-pro')).toContainText('Bozza preliminare');
+    await expect(page.locator('.dock')).not.toHaveCount(0);
+
+    await page.getByTestId('enter-essential').click();
+    await expect(page.getByTestId('simple-shell')).toBeVisible();
+    await expect(page.locator('.menu-bar')).toHaveCount(0);
+  });
+
+  test('enables run and export after loading an image in the essential workspace', async ({ page }) => {
+    await openEssential(page);
+    await page.getByTestId('file-input').setInputFiles([
+      path.join(FIXTURES, 'alpine.png'),
+      path.join(FIXTURES, 'alpine.jgw'),
+    ]);
+    await expect(page.getByText(/immagine 800×600 px importata/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('simple-run-all')).toBeEnabled();
+    await expect(page.getByTestId('simple-export')).toBeEnabled();
+  });
+
+  test('remembers the selected workspace mode after a reload', async ({ page }) => {
+    await expect(page.locator('.menu-bar')).toBeVisible();
+
+    await page.getByTestId('enter-essential').click();
+    await expect(page.getByTestId('simple-shell')).toBeVisible();
+
+    await page.getByTestId('enter-advanced').click();
+    await expect(page.locator('.menu-bar')).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator('.menu-bar')).toBeVisible();
+    await expect(page.getByTestId('simple-shell')).toHaveCount(0);
+  });
+
   test('boots with the professional shell, draft warning and no interrogative marker', async ({ page }) => {
     await expect(page).toHaveTitle(/Terrain \/ O/);
-    await expect(page.locator('.menu-bar')).toContainText('BOZZA PRELIMINARE');
+    await expect(page.locator('.status-bar-pro')).toContainText('Bozza preliminare');
     await expect(page.getByTestId('file-input')).toHaveAttribute(
       'aria-label',
       /Seleziona file da importare/,
@@ -101,7 +162,7 @@ test.describe('Terrain / O desktop shell', () => {
     await page.getByRole('button', { name: 'Switch to English' }).click();
     await expect(page.getByRole('menuitem', { name: 'View', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Layers' })).toBeVisible();
-    await expect(page.locator('.menu-bar-draft')).toHaveText('PRELIMINARY DRAFT');
+    await expect(page.locator('.status-bar-pro')).toContainText('Preliminary draft');
 
     // The choice is stored and survives a reload.
     await page.reload();
@@ -298,6 +359,31 @@ test.describe('Terrain / O desktop shell', () => {
     await expect(page.locator('.status-bar-pro')).toContainText('verificato');
   });
 
+  test('switches to the sprint standard and exports the ISSprOM symbol set', async ({ page }) => {
+    await importFixture(page);
+    await page.getByTestId('map-standard').selectOption('issprom');
+
+    await page.getByTestId('tool-draw-line').click();
+    const box = await page.locator('.map-surface').boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.4);
+    await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.6);
+    await page.keyboard.press('Enter');
+
+    await page.locator('.menu-icon-button[aria-label="Esporta"]').click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('export-omap').click(),
+    ]);
+    const file = await download.path();
+    expect(file).not.toBeNull();
+    const omap = fs.readFileSync(file as string, 'utf8');
+    expect(omap).toContain('<symbols count="185"');
+    expect(omap).toContain('code="505.1"');
+    expect(omap).toContain('<t k="terrain-o:simbolo">505.1</t>');
+  });
+
   test('exports OMAP with a top-left reference and y growing downward', async ({ page }) => {
     await importFixture(page);
 
@@ -327,6 +413,8 @@ test.describe('Terrain / O desktop shell', () => {
 
     expect(omap).toContain('<ref_point x="11.35000000" y="47.28000000"/>');
     expect(omap).toContain('<georeferencing scale="15000"><ref_point x="0" y="0"/>');
+    expect(omap).toContain('<symbols count="191"');
+    expect(omap).toContain('<t k="terrain-o:simbolo">405</t>');
     const objects = omap.split('<parts')[1] ?? '';
     const pairs = [...objects.matchAll(/<coords count="\d+">([^<]+)<\/coords>/g)]
       .flatMap((match) => match[1].split(';'))
@@ -339,6 +427,21 @@ test.describe('Terrain / O desktop shell', () => {
 
 test.describe('Terrain / O mobile shell', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+
+  test('keeps the three essential actions reachable on a phone', async ({ page }) => {
+    await openEssential(page);
+
+    await expect(page.locator('.simple-actions .simple-action')).toHaveCount(3);
+    await expect(page.getByTestId('simple-load')).toBeVisible();
+    await expect(page.getByTestId('enter-advanced')).toBeVisible();
+    await expect(page.locator('.menu-bar')).toHaveCount(0);
+
+    const actions = await page.locator('.simple-actions').boundingBox();
+    expect(actions).not.toBeNull();
+    if (!actions) return;
+    expect(actions.x).toBeGreaterThanOrEqual(0);
+    expect(actions.x + actions.width).toBeLessThanOrEqual(390);
+  });
 
   test('recognises the phone, opens the menu sheet and the side drawers', async ({ page }) => {
     await openApp(page);

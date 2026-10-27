@@ -9,6 +9,13 @@ import {
 import { metersPerPixel } from '../geo/projection';
 import { courseRoute } from '../geo/projection';
 import { featureProvenance } from '../render/provenance';
+import {
+  CONTOUR_BROWN,
+  COURSE_PURPLE,
+  INDEX_CONTOUR_BROWN,
+  featureStyle,
+  projectStandard,
+} from '../model/mapSymbols';
 import { osmSemanticOf } from '../osm/semantic';
 import { osmAreaStyle, osmLineStyle } from '../osm/style';
 
@@ -59,6 +66,7 @@ function wrapApprox(text: string, maxChars: number): string[] {
 export function exportProjectSvg(project: Project, images: RenderImages): string {
   if (!project.image) throw new Error('Nessuna immagine sorgente da esportare.');
   const image = project.image;
+  const standard = projectStandard(project);
   const mp = metersPerPixel(project);
   const pxToMm = mp ? (mp * 1000) / project.printScale : 0.1;
   const mapWmm = image.width * pxToMm;
@@ -98,7 +106,7 @@ export function exportProjectSvg(project: Project, images: RenderImages): string
       const paths = project.contours
         .map(
           (contour) =>
-            `<path d="${ringPath(contour.coords, contour.closed)}" fill="none" stroke="${contour.index ? '#8c4a1f' : '#a9764a'}" stroke-width="${num(contour.index ? lineUnit * 1.8 : lineUnit)}" stroke-linejoin="round"/>`,
+            `<path d="${ringPath(contour.coords, contour.closed)}" fill="none" stroke="${contour.index ? INDEX_CONTOUR_BROWN : CONTOUR_BROWN}" stroke-width="${num(contour.index ? lineUnit * 1.8 : lineUnit)}" stroke-linejoin="round"/>`,
         )
         .join('');
       layerGroups.push(`<g${opacity}>${paths}</g>`);
@@ -126,17 +134,26 @@ export function exportProjectSvg(project: Project, images: RenderImages): string
       for (const feature of project.features) {
         if (feature.kind === 'point') continue;
         const spec = typeSpec(feature.type);
+        const style = featureStyle(feature.type, standard);
         // Dashed = automatic, solid = manual, solid + tick = verified. The same
         // neutral provenance language used by the editor is kept in the export.
         const level = featureProvenance(feature);
-        const dash = level === 'auto' ? ` stroke-dasharray="${num(lineUnit * 5)} ${num(lineUnit * 3)}"` : '';
+        const symbolDash = style.dash
+          ? ` stroke-dasharray="${style.dash.map((value) => num(lineUnit * value)).join(' ')}"`
+          : '';
+        const provenanceDash = level === 'auto' ? ` stroke-dasharray="${num(lineUnit * 4)} ${num(lineUnit * 3)}"` : '';
         if (feature.kind === 'area') {
+          const areaStroke =
+            style.strokeWidth > 0 && style.stroke !== 'transparent'
+              ? ` stroke="${style.stroke}" stroke-width="${num(lineUnit * style.strokeWidth)}"`
+              : '';
           parts.push(
-            `<path d="${featurePath(feature)}" fill="${spec.fill ?? spec.color}" fill-opacity="0.55" fill-rule="evenodd" stroke="${spec.color}" stroke-width="${num(lineUnit * 1.4)}" stroke-linejoin="round"${dash}/>`,
+            `<path d="${featurePath(feature)}" fill="${style.fill ?? spec.fill ?? spec.color}" fill-opacity="${num(style.fillOpacity ?? 0.55)}" fill-rule="evenodd"${areaStroke} stroke-linejoin="round"${provenanceDash}/>`,
           );
         } else {
+          const dash = symbolDash || provenanceDash;
           parts.push(
-            `<path d="${ringPath(feature.coords, false)}" fill="none" stroke="${spec.color}" stroke-width="${num(lineUnit * (feature.type === 'road' ? 3 : 1.8))}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`,
+            `<path d="${ringPath(feature.coords, false)}" fill="none" stroke="${style.stroke}" stroke-width="${num(lineUnit * style.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`,
           );
         }
         if ((feature.source === 'manual' || feature.verified) && feature.name) {
@@ -152,7 +169,7 @@ export function exportProjectSvg(project: Project, images: RenderImages): string
       const route = courseRoute(project);
       if (project.course.showLines && route.length > 1) {
         parts.push(
-          `<path d="${route.map((p, i) => `${i === 0 ? 'M' : 'L'}${num(p.x)} ${num(p.y)}`).join(' ')}" fill="none" stroke="#9333ea" stroke-width="${num(lineUnit * 1.7)}" stroke-dasharray="${num(lineUnit * 7)} ${num(lineUnit * 4)}" stroke-linejoin="round"/>`,
+          `<path d="${route.map((p, i) => `${i === 0 ? 'M' : 'L'}${num(p.x)} ${num(p.y)}`).join(' ')}" fill="none" stroke="${COURSE_PURPLE}" stroke-width="${num(lineUnit * 1.7)}" stroke-linejoin="round"/>`,
         );
       }
       for (const feature of project.features) {
@@ -161,19 +178,19 @@ export function exportProjectSvg(project: Project, images: RenderImages): string
         const r = font(4.6);
         if (feature.type === 'start') {
           parts.push(
-            `<path d="M${num(p.x)} ${num(p.y - r * 1.15)} L${num(p.x + r)} ${num(p.y + r * 0.8)} L${num(p.x - r)} ${num(p.y + r * 0.8)} Z" fill="#ffffff" fill-opacity="0.92" stroke="#7e22ce" stroke-width="${num(lineUnit * 2.1)}"/>`,
+            `<path d="M${num(p.x)} ${num(p.y - r * 1.15)} L${num(p.x + r)} ${num(p.y + r * 0.8)} L${num(p.x - r)} ${num(p.y + r * 0.8)} Z" fill="#ffffff" fill-opacity="0.92" stroke="${COURSE_PURPLE}" stroke-width="${num(lineUnit * 2.1)}"/>`,
           );
         } else if (feature.type === 'finish') {
           parts.push(
-            `<circle cx="${num(p.x)}" cy="${num(p.y)}" r="${num(r)}" fill="none" stroke="#7e22ce" stroke-width="${num(lineUnit * 2.1)}"/><circle cx="${num(p.x)}" cy="${num(p.y)}" r="${num(r * 0.58)}" fill="none" stroke="#7e22ce" stroke-width="${num(lineUnit * 2.1)}"/>`,
+            `<circle cx="${num(p.x)}" cy="${num(p.y)}" r="${num(r)}" fill="none" stroke="${COURSE_PURPLE}" stroke-width="${num(lineUnit * 2.1)}"/><circle cx="${num(p.x)}" cy="${num(p.y)}" r="${num(r * 0.58)}" fill="none" stroke="${COURSE_PURPLE}" stroke-width="${num(lineUnit * 2.1)}"/>`,
           );
         } else {
           parts.push(
-            `<circle cx="${num(p.x)}" cy="${num(p.y)}" r="${num(r)}" fill="#ffffff" fill-opacity="0.92" stroke="#7e22ce" stroke-width="${num(lineUnit * 2.1)}"/>`,
+            `<circle cx="${num(p.x)}" cy="${num(p.y)}" r="${num(r)}" fill="#ffffff" fill-opacity="0.92" stroke="${COURSE_PURPLE}" stroke-width="${num(lineUnit * 2.1)}"/>`,
           );
           if (feature.code) {
             parts.push(
-              `<text x="${num(p.x + r + font(2))}" y="${num(p.y - r)}" font-family="Segoe UI, system-ui, sans-serif" font-size="${num(font(2.6))}" font-weight="700" fill="#581c87" stroke="#ffffff" stroke-width="${num(font(0.5))}" paint-order="stroke">${esc(feature.code)}</text>`,
+              `<text x="${num(p.x + r + font(2))}" y="${num(p.y - r)}" font-family="Segoe UI, system-ui, sans-serif" font-size="${num(font(2.6))}" font-weight="700" fill="${COURSE_PURPLE}" stroke="#ffffff" stroke-width="${num(font(0.5))}" paint-order="stroke">${esc(feature.code)}</text>`,
             );
           }
         }
